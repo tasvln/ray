@@ -1,0 +1,44 @@
+# CMake build output
+/build/
+/CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Binaries
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+
+# VSCode
+.vscode/
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs
+*.log
+
+# Image output
+*.png
+*.jpg
+*.ppm
+
+# Backup/Editor
+*~
+*.swp
+*.swo
+
+# Python or script cache (if any)
+__pycache__/
+*.pyc
+
+# CUDA/PTX build files (if used)
+*.ptx
+*.cu.obj
