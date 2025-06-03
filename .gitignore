@@ -42,3 +42,6 @@ __pycache__/
 # CUDA/PTX build files (if used)
 *.ptx
 *.cu.obj
+
+# Extras
+*.sh
