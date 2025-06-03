@@ -6,10 +6,10 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    Window window(800, 600, "Ray");
-
+    Window window(1080, 600, "Raytracer");
+   
     while (!window.shouldClose()) {
-        window.pollEvents();
+      window.pollEvents();
     }
 
     return 0;
