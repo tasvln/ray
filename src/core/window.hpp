@@ -1,9 +1,12 @@
 #ifndef WINDOW_HPP
 #define WINDOW_HPP
 
+#define GLFW_INCLUDE_VULKAN
+
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 class Window {
     public:
@@ -15,6 +18,7 @@ class Window {
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
             glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
             window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
@@ -35,8 +39,8 @@ class Window {
             glfwTerminate();
         };
 
-        bool shouldClose() const {
-            return glfwWindowShouldClose(window);
+        GLFWwindow* getWindow() const {
+            return window;
         }
 
         void pollEvents() const {
@@ -51,16 +55,16 @@ class Window {
             framebufferResized = false;
         }
 
+        bool shouldClose() const {
+            return glfwWindowShouldClose(window);
+        }
+
         int getWidth() const {
             return width;
         }
 
         int getHeight() const {
             return height;
-        }
-
-        GLFWwindow* getWindow() const {
-            return window;
         }
         
     private:

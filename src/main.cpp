@@ -1,16 +1,25 @@
+#define GLFW_INCLUDE_VULKAN
 #include <iostream>
 #include <string>
 
 #include "core/window.hpp"
+#include "vulkan/vulkan_context.hpp"
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    Window window(1080, 600, "Raytracer");
-   
-    while (!window.shouldClose()) {
-      window.pollEvents();
+    try{
+      Window window(1080, 600, "Ray");
+      VulkanContext context(window);
+    
+      while (!window.shouldClose()) {
+        window.pollEvents();
+      }
+      
+    } catch (const std::exception& e) {
+      fprintf(stderr, "Error: %s\n", e.what());
+      return EXIT_FAILURE;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
