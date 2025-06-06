@@ -19,7 +19,7 @@ class Window {
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+            glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // set to GLFW_FALSE if you don't want the window to be resizable
 
             window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
             if (!window) {

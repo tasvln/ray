@@ -10,10 +10,11 @@ using namespace std;
 int main(int argc, char* argv[]) {
     try{
       Window window(1080, 600, "Ray");
-      VulkanContext context(window);
+      VulkanContext vk(window);
     
       while (!window.shouldClose()) {
         window.pollEvents();
+        vk.drawFrame();
       }
       
     } catch (const std::exception& e) {
