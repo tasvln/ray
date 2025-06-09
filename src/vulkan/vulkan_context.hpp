@@ -77,26 +77,31 @@ class VulkanContext {
                 vkDeviceWaitIdle(device);  // Add this BEFORE destroying anything
             }
             
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
                 vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
                 vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+            }
+            imageAvailableSemaphores.clear();
+            renderFinishedSemaphores.clear();
+            imagesInFlight.clear();
+
+            // Cleanup per frame in flight
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
                 vkDestroyFence(device, inFlightFences[i], nullptr);
             }
-            if (!commandBuffers.empty()) {
-                vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
-            }
-            if (commandPool != VK_NULL_HANDLE) {
-                vkDestroyCommandPool(device, commandPool, nullptr);
-            }
+            inFlightFences.clear();
+
             if (!swapChainFramebuffers.empty()) {
                 for (auto framebuffer : swapChainFramebuffers) {
                     vkDestroyFramebuffer(device, framebuffer, nullptr);
                 }
+                swapChainFramebuffers.clear();
             }
             if (!pipelines.empty()) {
                 for (auto pipeline : pipelines) {
                     vkDestroyPipeline(device, pipeline, nullptr);
                 }
+                pipelines.clear();
             }
             if (pipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -108,9 +113,17 @@ class VulkanContext {
                 for (auto imageView : swapChainImageViews) {
                     vkDestroyImageView(device, imageView, nullptr);
                 }
+                swapChainImageViews.clear();
             }
             if (swapChain != VK_NULL_HANDLE) {
                 vkDestroySwapchainKHR(device, swapChain, nullptr);
+            }
+            if (!commandBuffers.empty()) {
+                vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+                commandBuffers.clear();
+            }
+            if (commandPool != VK_NULL_HANDLE) {
+                vkDestroyCommandPool(device, commandPool, nullptr);
             }
             if (device != VK_NULL_HANDLE) {
                 vkDestroyDevice(device, nullptr);
@@ -141,25 +154,36 @@ class VulkanContext {
                 throw std::runtime_error("Failed to acquire swap chain image!");
             }
 
+            // Wait on the image's in-flight fence if it exists
+            if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+                vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+            }
+
+            // Mark the image as now being in use by this frame
+            imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
             vkResetFences(device, 1, &inFlightFences[currentFrame]);
         
             vkResetCommandBuffer(commandBuffers[currentFrame], 0);    
             recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
+            VkSemaphore imageAvailable = imageAvailableSemaphores[currentFrame];
+            VkSemaphore renderFinished = renderFinishedSemaphores[imageIndex];
+
             VkSubmitInfo submitInfo{};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+            VkSemaphore waitSemaphores[] = { imageAvailable };
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
             submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitSemaphores = &imageAvailable;
             submitInfo.pWaitDstStageMask = waitStages;
 
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+            VkSemaphore signalSemaphores[] = { renderFinished };
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -225,6 +249,7 @@ class VulkanContext {
         std::vector<VkSemaphore> imageAvailableSemaphores;
         std::vector<VkSemaphore> renderFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
+        std::vector<VkFence> imagesInFlight;
         size_t currentFrame = 0;
 
         bool framebufferResized = false;
@@ -938,8 +963,10 @@ class VulkanContext {
 
         // Fix this
         void createSyncObjects() {
-            imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-            renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+            imageAvailableSemaphores.resize(swapChainImages.size());
+            renderFinishedSemaphores.resize(swapChainImages.size());
+            imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
+
             inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
             VkSemaphoreCreateInfo semaphoreInfo{};
@@ -947,14 +974,18 @@ class VulkanContext {
 
             VkFenceCreateInfo fenceInfo{};
             fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // So first frame doesn't hang
 
-            for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
                 if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                    vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-                    throw std::runtime_error("Failed to create sync objects!");
-                
+                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("Failed to create semaphores for a swap chain image!");
+                }
+            }
+
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                if (vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("Failed to create in-flight fence!");
                 }
             }
         }
@@ -1021,7 +1052,10 @@ class VulkanContext {
             cleanupSwapChain();     // You'll need to write this
             createSwapChain(window); // Already done
             createImageViews();     // Already done
+            createRenderPass();
+            createGraphicsPipeline(); // Already done
             createFramebuffers();   // Already done
+            createCommandBuffers(); // Already done
         }
 
         void cleanupSwapChain() {
@@ -1035,11 +1069,30 @@ class VulkanContext {
             }
             swapChainImageViews.clear();
 
+            if (!pipelines.empty()) {
+                for (auto pipeline : pipelines) {
+                    vkDestroyPipeline(device, pipeline, nullptr);
+                }
+                pipelines.clear();
+            }
+
+            if (pipelineLayout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+                pipelineLayout = VK_NULL_HANDLE;
+            }
+
+            if (renderPass != VK_NULL_HANDLE) {
+                vkDestroyRenderPass(device, renderPass, nullptr);
+                renderPass = VK_NULL_HANDLE;
+            }
+
             if (swapChain != VK_NULL_HANDLE) {
                 vkDestroySwapchainKHR(device, swapChain, nullptr);
                 swapChain = VK_NULL_HANDLE;
             }
         }
+
+
 };
 
 #endif
