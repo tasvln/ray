@@ -7,18 +7,22 @@
 
 using namespace std;
 
+void glfwErrorCallback(int error, const char* description) {
+    std::cerr << "GLFW Error [" << error << "]: " << description << std::endl;
+}
+
 int main(int argc, char* argv[]) {
+    glfwSetErrorCallback(glfwErrorCallback);
+    Window window(1080, 600, "Ray");
+    VulkanContext vk(window);
+
     try{
-      Window window(1080, 600, "Ray");
-      VulkanContext vk(window);
-    
       while (!window.shouldClose()) {
         window.pollEvents();
-        vk.drawFrame();
+        vk.drawFrame(window.getWindow());
       }
-      
     } catch (const std::exception& e) {
-      fprintf(stderr, "Error: %s\n", e.what());
+      std::cerr << e.what() << std::endl;
       return EXIT_FAILURE;
     }
 

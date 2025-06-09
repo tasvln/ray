@@ -43,6 +43,12 @@ target_link_libraries(RAY
 		assimp::assimp
 )
 
+add_custom_command(
+    TARGET RAY POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/shaders $<TARGET_FILE_DIR:RAY>/shaders
+)
+
 # For CUDA integration (optional)
 # enable_language(CUDA)
 # add_subdirectory(shaders)

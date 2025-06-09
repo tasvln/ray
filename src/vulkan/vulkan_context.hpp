@@ -15,8 +15,11 @@
 #include <limits>
 #include <cstdint>
 #include <fstream>
+#include <cstring>
 
 #include "core/window.hpp"
+
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
@@ -33,30 +36,40 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+// Function to create a debug messenger
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+// Function to destroy a debug messenger
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
+
 class VulkanContext {
     public:
         VulkanContext(const Window& window) {
-            std::vector<const char*> extensions;
-
-            uint32_t glfwExtensionCount = 0;
-            const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-            extensions.assign(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-            if (enableValidationLayers) {
-                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            }
-
-            createInstance(extensions);
+            createInstance();
+            setupDebugMessenger();
             createSurface(window);
             pickPhysicalDevice();
             createLogicalDevice();
             createSwapChain(window.getWindow());
             createImageViews();
             createRenderPass();
-            createFramebuffers();
             createGraphicsPipeline();
+            createFramebuffers();
             createCommandPool();
             createCommandBuffers();
+            createSyncObjects();
         }
 
         ~VulkanContext() {
@@ -75,20 +88,26 @@ class VulkanContext {
             if (commandPool != VK_NULL_HANDLE) {
                 vkDestroyCommandPool(device, commandPool, nullptr);
             }
-            for (auto pipeline : pipelines) {
-                vkDestroyPipeline(device, pipeline, nullptr);
+            if (!swapChainFramebuffers.empty()) {
+                for (auto framebuffer : swapChainFramebuffers) {
+                    vkDestroyFramebuffer(device, framebuffer, nullptr);
+                }
+            }
+            if (!pipelines.empty()) {
+                for (auto pipeline : pipelines) {
+                    vkDestroyPipeline(device, pipeline, nullptr);
+                }
             }
             if (pipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
             }
-            for (auto framebuffer : swapChainFramebuffers) {
-                vkDestroyFramebuffer(device, framebuffer, nullptr);
-            }
             if (renderPass != VK_NULL_HANDLE) {
                 vkDestroyRenderPass(device, renderPass, nullptr);
             }
-            for (auto imageView : swapChainImageViews) {
-                vkDestroyImageView(device, imageView, nullptr);
+            if (!swapChainImageViews.empty()) {
+                for (auto imageView : swapChainImageViews) {
+                    vkDestroyImageView(device, imageView, nullptr);
+                }
             }
             if (swapChain != VK_NULL_HANDLE) {
                 vkDestroySwapchainKHR(device, swapChain, nullptr);
@@ -99,10 +118,80 @@ class VulkanContext {
             if (surface != VK_NULL_HANDLE) {
                 vkDestroySurfaceKHR(instance, surface, nullptr);
             }
+            if (enableValidationLayers && debugMessenger != VK_NULL_HANDLE) {
+                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+            }
             if (instance != VK_NULL_HANDLE) {
                 vkDestroyInstance(instance, nullptr);
             }
         }
+
+        // main.cpp functions
+        void drawFrame(GLFWwindow* window) {
+            vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+            uint32_t imageIndex;
+            VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+            // to handle when the window is resized
+            if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+                recreateSwapChain(window);
+                return;
+            } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+                throw std::runtime_error("Failed to acquire swap chain image!");
+            }
+
+            vkResetFences(device, 1, &inFlightFences[currentFrame]);
+        
+            vkResetCommandBuffer(commandBuffers[currentFrame], 0);    
+            recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+            VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
+
+            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to submit draw command buffer!");
+            }
+
+            VkPresentInfoKHR presentInfo{};
+            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = signalSemaphores;
+
+            VkSwapchainKHR swapChains[] = { swapChain };
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = swapChains;
+            presentInfo.pImageIndices = &imageIndex;
+
+            presentInfo.pResults = nullptr; // Optional
+
+            result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+            // check if the swap chain needs to be recreated
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+                framebufferResized = false;
+                recreateSwapChain(window);
+            } else if (result != VK_SUCCESS) {
+                throw std::runtime_error("Failed to present swap chain image!");
+            }
+
+            currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        }
+
 
     private:
         VkInstance instance;
@@ -111,6 +200,8 @@ class VulkanContext {
         VkDevice device = VK_NULL_HANDLE;
         VkQueue graphicsQueue = VK_NULL_HANDLE;
         VkQueue presentQueue = VK_NULL_HANDLE;
+
+        VkDebugUtilsMessengerEXT debugMessenger;
 
         // Swap chain related members
         VkSwapchainKHR swapChain;
@@ -135,11 +226,10 @@ class VulkanContext {
         std::vector<VkSemaphore> renderFinishedSemaphores;
         std::vector<VkFence> inFlightFences;
         size_t currentFrame = 0;
-        const int MAX_FRAMES_IN_FLIGHT = 2;
 
         bool framebufferResized = false;
                 
-        std::vector<const char*> validationLayers = {
+        const std::vector<const char*> validationLayers = {
             "VK_LAYER_KHRONOS_validation"
         };
 
@@ -147,10 +237,10 @@ class VulkanContext {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
 
-        #ifdef _DEBUG
-            bool enableValidationLayers = true;
+        #ifdef NDEBUG
+            const bool enableValidationLayers = false;
         #else
-            bool enableValidationLayers = false;
+            const bool enableValidationLayers = true;
         #endif
 
         QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
@@ -285,20 +375,47 @@ class VulkanContext {
             return shaderModule;
         }
 
+        static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+            VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+            VkDebugUtilsMessageTypeFlagsEXT messageType,
+            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+            void* pUserData) {
+
+            std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+            return VK_FALSE;
+        }
+
         // read shader code from a file
         std::vector<char> readFile(const std::string& filename) {
             std::ifstream file(filename, std::ios::ate | std::ios::binary);
             if (!file.is_open()) {
-                throw std::runtime_error("failed to open file: " + filename);
+                throw std::runtime_error("failed to open file!");
             }
 
             size_t fileSize = (size_t)file.tellg();
             std::vector<char> buffer(fileSize);
+
             file.seekg(0);
             file.read(buffer.data(), fileSize);
+
             file.close();
 
             return buffer;
+        }
+
+        std::vector<const char*> getRequiredExtensions() {
+            uint32_t glfwExtensionCount = 0;
+            const char** glfwExtensions;
+
+            glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+            std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+            if (enableValidationLayers) {
+                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            }
+
+            return extensions;
         }
 
 
@@ -332,8 +449,51 @@ class VulkanContext {
             return requiredExtensions.empty();
         }
 
+        bool checkValidationLayerSupport() {
+            uint32_t layerCount;
+            vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+            std::vector<VkLayerProperties> availableLayers(layerCount);
+            vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+            for (const char* layerName : validationLayers) {
+                bool layerFound = false;
+
+                for (const auto& layerProperties : availableLayers) {
+                    if (strcmp(layerName, layerProperties.layerName) == 0) {
+                        layerFound = true;
+                        break;
+                    }
+                }
+
+                if (!layerFound) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+            createInfo = {};
+            createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            createInfo.messageSeverity =
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            createInfo.messageType =
+                VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            createInfo.pfnUserCallback = debugCallback;
+            createInfo.pUserData = nullptr; // ✅ Add this line
+        }
+        
         // Create a Vulkan instance with the required extensions and validation layers
-        void createInstance(const std::vector<const char*>& extensions) {
+        void createInstance() {
+            if (enableValidationLayers && !checkValidationLayerSupport()) {
+                throw std::runtime_error("Validation layers requested, but not available!");
+            }
+
             VkApplicationInfo appInfo{};
             appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
             appInfo.pApplicationName = "Ray";
@@ -345,20 +505,42 @@ class VulkanContext {
             VkInstanceCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
             createInfo.pApplicationInfo = &appInfo;
-            
+
+            auto extensions = getRequiredExtensions();
             createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
             createInfo.ppEnabledExtensionNames = extensions.data();
 
+            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
             if (enableValidationLayers) {
                 createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
                 createInfo.ppEnabledLayerNames = validationLayers.data();
+
+                populateDebugMessengerCreateInfo(debugCreateInfo);  // You must implement this
+                createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
             } else {
                 createInfo.enabledLayerCount = 0;
+                createInfo.pNext = nullptr;
             }
 
             if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create Vulkan instance");
             }
+        }
+
+        void setupDebugMessenger() {
+            if (!enableValidationLayers) return;
+
+            VkDebugUtilsMessengerCreateInfoEXT createInfo;
+            populateDebugMessengerCreateInfo(createInfo);
+
+            VkResult result = CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger);
+            if (result != VK_SUCCESS) {
+                std::cerr << "Failed to create debug messenger! Error code: " << result << std::endl;
+                // Optional: still throw if you want to halt on failure
+                throw std::runtime_error("Failed to set up debug messenger");
+            }
+
+            std::cout << "Debug messenger created successfully." << std::endl;
         }
 
         void createSurface(const Window& window) {
@@ -381,12 +563,12 @@ class VulkanContext {
 
             
             for (const auto& dev : devices) {
-                auto indices = findQueueFamilies(dev);
-                if (indices.isComplete()) {
+                if (isDeviceSuitable(dev)) {
                     physicalDevice = dev;
                     break;
                 }
             }
+
 
             if (physicalDevice == VK_NULL_HANDLE) {
                 throw std::runtime_error("Failed to find a suitable GPU");
@@ -423,6 +605,8 @@ class VulkanContext {
             deviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
             deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
+            VkPhysicalDeviceFeatures deviceFeatures{};
+            deviceInfo.pEnabledFeatures = &deviceFeatures;
 
             if (vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create logical device");
@@ -714,6 +898,8 @@ class VulkanContext {
             pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
             pipelineInfo.basePipelineIndex = -1; // Optional
 
+            pipelines.resize(1); // Resize to hold one pipeline
+
             if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[0]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create graphics pipeline");
             }
@@ -737,7 +923,7 @@ class VulkanContext {
         }
 
         void createCommandBuffers() {
-            commandBuffers.resize(swapChainFramebuffers.size());
+            commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
             VkCommandBufferAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -748,59 +934,10 @@ class VulkanContext {
             if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to allocate command buffers");
             }
-
-            for (size_t i = 0; i < commandBuffers.size(); i++) {
-                VkCommandBufferBeginInfo beginInfo{};
-                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-                if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-                    throw std::runtime_error("Failed to begin recording command buffer");
-                }
-
-                VkRenderPassBeginInfo renderPassInfo{};
-                renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassInfo.renderPass = renderPass;
-                renderPassInfo.framebuffer = swapChainFramebuffers[i];
-
-                renderPassInfo.renderArea.offset = {0, 0};
-                renderPassInfo.renderArea.extent = swapChainExtent;
-
-                VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
-                renderPassInfo.clearValueCount = 1;
-                renderPassInfo.pClearValues = &clearColor;
-
-                vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-                
-                vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
-
-                // Draw call would go here
-                // vkCmdDraw(commandBuffers[i], vertexCount, instanceCount, firstVertex, firstInstance);
-
-                VkViewport viewport{};
-                viewport.x = 0.0f;
-                viewport.y = 0.0f;
-                viewport.width  = (float) swapChainExtent.width;
-                viewport.height = (float) swapChainExtent.height;
-                viewport.minDepth = 0.0f;
-                viewport.maxDepth = 1.0f;
-                vkCmdSetViewport(commandBuffers[i], 0, 1, &viewport);
-
-                VkRect2D scissor{};
-                scissor.offset = {0, 0};
-                scissor.extent = swapChainExtent;
-                vkCmdSetScissor(commandBuffers[i], 0, 1, &scissor);
-
-                vkCmdDraw(commandBuffers[i], 3, 1, 0, 0); // 3 vertices, 1 instance
-
-                vkCmdEndRenderPass(commandBuffers[i]);
-
-                if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-                    throw std::runtime_error("Failed to record command buffer");
-                }
-            }
         }
 
-        void creatSyncObjects() {
+        // Fix this
+        void createSyncObjects() {
             imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
             renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
             inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
@@ -823,74 +960,11 @@ class VulkanContext {
         }
 
         // main.cpp functions
-        void drawFrame() {
-            vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-
-            uint32_t imageIndex;
-            vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
-
-            // to handle when the window is resized
-            if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-                recreateSwapChain(); // implement this later
-                return;
-            } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-                throw std::runtime_error("Failed to acquire swap chain image!");
-            }
-
-            vkResetFences(device, 1, &inFlightFences[currentFrame]);
-        
-            vkResetCommandBuffer(commandBuffers[imageIndex], 0);    
-            recordCommandBuffer(commandBuffers[imageIndex], imageIndex);
-
-            VkSubmitInfo submitInfo{};
-            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
-            VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-            submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = waitSemaphores;
-            submitInfo.pWaitDstStageMask = waitStages;
-
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
-
-            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
-            submitInfo.signalSemaphoreCount = 1;
-            submitInfo.pSignalSemaphores = signalSemaphores;
-
-            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to submit draw command buffer!");
-            }
-
-            VkPresentInfoKHR presentInfo{};
-            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-            presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = signalSemaphores;
-
-            VkSwapchainKHR swapChains[] = { swapChain };
-            presentInfo.swapchainCount = 1;
-            presentInfo.pSwapchains = swapChains;
-            presentInfo.pImageIndices = &imageIndex;
-
-            presentInfo.pResults = nullptr; // Optional
-
-            result = vkQueuePresentKHR(presentQueue, &presentInfo);
-
-            // check if the swap chain needs to be recreated
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-                framebufferResized = false;
-                recreateSwapChain();
-            } else if (result != VK_SUCCESS) {
-                throw std::runtime_error("Failed to present swap chain image!");
-            }
-
-            currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-        }
-
         void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = 0; // Optional
+            beginInfo.pInheritanceInfo = nullptr; // Optional
 
             if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
                 throw std::runtime_error("failed to begin recording command buffer!");
@@ -909,6 +983,21 @@ class VulkanContext {
 
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
+            
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width  = (float) swapChainExtent.width;
+            viewport.height = (float) swapChainExtent.height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
             vkCmdEndRenderPass(commandBuffer);
 
@@ -918,19 +1007,19 @@ class VulkanContext {
         }
 
         // function to handle window resizing
-        void recreateSwapChain() {
+        void recreateSwapChain(GLFWwindow* window) {
             // Make sure window is not minimized
             int width = 0, height = 0;
-            glfwGetFramebufferSize(window.getWindow(), &width, &height);
+            glfwGetFramebufferSize(window, &width, &height);
             while (width == 0 || height == 0) {
-                glfwGetFramebufferSize(window.getWindow(), &width, &height);
+                glfwGetFramebufferSize(window, &width, &height);
                 glfwWaitEvents();
             }
 
             vkDeviceWaitIdle(device);
 
             cleanupSwapChain();     // You'll need to write this
-            createSwapChain();      // Already done
+            createSwapChain(window); // Already done
             createImageViews();     // Already done
             createFramebuffers();   // Already done
         }
