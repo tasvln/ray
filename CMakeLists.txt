@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(RAY)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Output directories
@@ -38,10 +38,14 @@ target_include_directories(RAY PRIVATE
 target_link_libraries(RAY
 	PRIVATE
 		Vulkan::Vulkan
+        volk
 		glfw
 		glm::glm
 		assimp::assimp
 )
+
+target_compile_definitions(RAY PRIVATE VOLK_IMPLEMENTATION)
+target_include_directories(RAY PRIVATE ${Vulkan_INCLUDE_DIRS})
 
 add_custom_command(
     TARGET RAY POST_BUILD
