@@ -29,6 +29,7 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
+find_package(volk CONFIG REQUIRED)
 
 target_include_directories(RAY PRIVATE
 	${Vulkan_INCLUDE_DIRS}
@@ -38,14 +39,13 @@ target_include_directories(RAY PRIVATE
 target_link_libraries(RAY
 	PRIVATE
 		Vulkan::Vulkan
-        volk
 		glfw
 		glm::glm
 		assimp::assimp
+        volk::volk
 )
 
-target_compile_definitions(RAY PRIVATE VOLK_IMPLEMENTATION)
-target_include_directories(RAY PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_compile_definitions(RAY PRIVATE VOLK_IMPLEMENTATION VK_NO_PROTOTYPES)
 
 add_custom_command(
     TARGET RAY POST_BUILD
