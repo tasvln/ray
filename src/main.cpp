@@ -18,6 +18,7 @@ int main(int argc, char* argv[]) {
       while (!window.shouldClose()) {
         window.pollEvents();
         // vk.drawFrame(window.getWindow());
+        vk.drawFrame();
       }
     } catch (const std::exception& e) {
       std::cerr << e.what() << std::endl;

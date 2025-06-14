@@ -82,6 +82,9 @@ class VulkanContext {
             createImageViews();
 
             createCommandPool();
+
+            createRenderPass();
+            createSampler();
             
             // ray tracing related
             createRayDescriptorSetLayout();
@@ -92,193 +95,65 @@ class VulkanContext {
             createRayPipeline();
             createShaderBindingTable();
 
+            createFullscreenPipeline();
+            createFramebuffers();
+
             createCommandBuffers();
-            // createSyncObjects();
+            createSyncObjects();
         }
 
         ~VulkanContext() {
             if (device != VK_NULL_HANDLE) {
-                vkDeviceWaitIdle(device);  // Add this BEFORE destroying anything
+                vkDeviceWaitIdle(device);
 
-                // --- Ray tracing cleanup ---
-                if (rayOutputImageView != VK_NULL_HANDLE)
-                    vkDestroyImageView(device, rayOutputImageView, nullptr);
+                cleanupRayTracing();
+                cleanupFullscreen();
+                cleanupAccelerationStructures();
+                cleanupSyncObjects();
+                cleanupSwapChain();
+                cleanupPipelinesAndLayouts();
+                cleanupCommandBuffersAndPool();
 
-                if (rayOutputImage != VK_NULL_HANDLE)
-                    vkDestroyImage(device, rayOutputImage, nullptr);
-
-                if (rayOutputMemory != VK_NULL_HANDLE)
-                    vkFreeMemory(device, rayOutputMemory, nullptr);
-
-                if (rayDescriptorSetLayout != VK_NULL_HANDLE)
-                    vkDestroyDescriptorSetLayout(device, rayDescriptorSetLayout, nullptr);
-
-                if (rayDescriptorPool != VK_NULL_HANDLE)
-                    vkDestroyDescriptorPool(device, rayDescriptorPool, nullptr);
-
-                if (raySBTBuffer != VK_NULL_HANDLE)
-                    vkDestroyBuffer(device, raySBTBuffer, nullptr);
-
-                if (raySBTMemory != VK_NULL_HANDLE)
-                    vkFreeMemory(device, raySBTMemory, nullptr);
-
-                if (rayPipelineLayout != VK_NULL_HANDLE)
-                    vkDestroyPipelineLayout(device, rayPipelineLayout, nullptr);
-
-                // --- BLAS cleanup ---
-                if (blas.handle != VK_NULL_HANDLE) {
-                    vkDestroyAccelerationStructureKHR(device, blas.handle, nullptr);
-                    blas.handle = VK_NULL_HANDLE;
-                }
-
-                if (blas.buffer != VK_NULL_HANDLE) {
-                    vkDestroyBuffer(device, blas.buffer, nullptr);
-                    blas.buffer = VK_NULL_HANDLE;
-                }
-
-                if (blas.memory != VK_NULL_HANDLE) {
-                    vkFreeMemory(device, blas.memory, nullptr);
-                    blas.memory = VK_NULL_HANDLE;
-                }
-
-                blas.deviceAddress = 0; // Reset regardless; it's just a number
-
-                // --- TLAS cleanup ---
-                if (tlas.handle != VK_NULL_HANDLE) {
-                    vkDestroyAccelerationStructureKHR(device, tlas.handle, nullptr);
-                    tlas.handle = VK_NULL_HANDLE;
-                }
-
-                if (tlas.buffer != VK_NULL_HANDLE) {
-                    vkDestroyBuffer(device, tlas.buffer, nullptr);
-                    tlas.buffer = VK_NULL_HANDLE;
-                }
-
-                if (tlas.memory != VK_NULL_HANDLE) {
-                    vkFreeMemory(device, tlas.memory, nullptr);
-                    tlas.memory = VK_NULL_HANDLE;
-                }
-
-                tlas.deviceAddress = 0; // Reset regardless; it's just a number
-                // --- End of ray tracing cleanup ---
-
-
-                // Your existing cleanup continues here:
-                for (size_t i = 0; i < swapChainImages.size(); i++) {
-                    vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-                    vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-                }
-                imageAvailableSemaphores.clear();
-                renderFinishedSemaphores.clear();
-                imagesInFlight.clear();
-
-                for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-                    vkDestroyFence(device, inFlightFences[i], nullptr);
-                }
-                inFlightFences.clear();
-
-                if (!swapChainFramebuffers.empty()) {
-                    for (auto framebuffer : swapChainFramebuffers) {
-                        vkDestroyFramebuffer(device, framebuffer, nullptr);
-                    }
-                    swapChainFramebuffers.clear();
-                }
-                if (!pipelines.empty()) {
-                    for (auto pipeline : pipelines) {
-                        vkDestroyPipeline(device, pipeline, nullptr);
-                    }
-                    pipelines.clear();
-                }
-                if (graphicsPipelineLayout != VK_NULL_HANDLE) {
-                    vkDestroyPipelineLayout(device, graphicsPipelineLayout, nullptr);
-                }
-                if (renderPass != VK_NULL_HANDLE) {
-                    vkDestroyRenderPass(device, renderPass, nullptr);
-                }
-                if (!swapChainImageViews.empty()) {
-                    for (auto imageView : swapChainImageViews) {
-                        vkDestroyImageView(device, imageView, nullptr);
-                    }
-                    swapChainImageViews.clear();
-                }
-                if (swapChain != VK_NULL_HANDLE) {
-                    vkDestroySwapchainKHR(device, swapChain, nullptr);
-                }
-                if (!commandBuffers.empty()) {
-                    vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
-                    commandBuffers.clear();
-                }
-                if (commandPool != VK_NULL_HANDLE) {
-                    vkDestroyCommandPool(device, commandPool, nullptr);
-                }
                 vkDestroyDevice(device, nullptr);
             }
 
-            if (surface != VK_NULL_HANDLE) {
-                vkDestroySurfaceKHR(instance, surface, nullptr);
-            }
-            if (enableValidationLayers && debugMessenger != VK_NULL_HANDLE) {
-                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-            }
-            if (instance != VK_NULL_HANDLE) {
-                vkDestroyInstance(instance, nullptr);
-            }
+            cleanupSurfaceAndInstance();
         }
 
         // main.cpp functions
-        void drawFrame(GLFWwindow* window) {
+        void drawFrame() {
             vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+            vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
             uint32_t imageIndex;
-            VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+            vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-            // to handle when the window is resized
-            if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-                recreateSwapChain(window);
-                return;
-            } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-                throw std::runtime_error("Failed to acquire swap chain image!");
-            }
-
-            // Wait on the image's in-flight fence if it exists
-            if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-                vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-            }
-
-            // Mark the image as now being in use by this frame
-            imagesInFlight[imageIndex] = inFlightFences[currentFrame];
-
-            vkResetFences(device, 1, &inFlightFences[currentFrame]);
-        
-            vkResetCommandBuffer(commandBuffers[currentFrame], 0);    
-            recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-
-            VkSemaphore imageAvailable = imageAvailableSemaphores[currentFrame];
-            VkSemaphore renderFinished = renderFinishedSemaphores[imageIndex];
+            // Record commands before submitting!
+            recordCommandBuffer(commandBuffers[imageIndex], imageIndex);
 
             VkSubmitInfo submitInfo{};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-            VkSemaphore waitSemaphores[] = { imageAvailable };
+            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
             submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = &imageAvailable;
+            submitInfo.pWaitSemaphores = waitSemaphores;
             submitInfo.pWaitDstStageMask = waitStages;
 
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+            submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
-            VkSemaphore signalSemaphores[] = { renderFinished };
+            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
             if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to submit draw command buffer!");
+                throw std::runtime_error("failed to submit draw command buffer!");
             }
 
             VkPresentInfoKHR presentInfo{};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
             presentInfo.waitSemaphoreCount = 1;
             presentInfo.pWaitSemaphores = signalSemaphores;
 
@@ -287,49 +162,44 @@ class VulkanContext {
             presentInfo.pSwapchains = swapChains;
             presentInfo.pImageIndices = &imageIndex;
 
-            presentInfo.pResults = nullptr; // Optional
-
-            result = vkQueuePresentKHR(presentQueue, &presentInfo);
-
-            // check if the swap chain needs to be recreated
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-                framebufferResized = false;
-                recreateSwapChain(window);
-            } else if (result != VK_SUCCESS) {
-                throw std::runtime_error("Failed to present swap chain image!");
-            }
+            vkQueuePresentKHR(presentQueue, &presentInfo);
 
             currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
 
 
     private:
-        VkInstance instance;
-        VkSurfaceKHR surface;
+        VkInstance instance = VK_NULL_HANDLE;
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkDevice device = VK_NULL_HANDLE;
         VkQueue graphicsQueue = VK_NULL_HANDLE;
         VkQueue presentQueue = VK_NULL_HANDLE;
 
-        VkDebugUtilsMessengerEXT debugMessenger;
+        VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
         // Swap chain related members
-        VkSwapchainKHR swapChain;
-        VkFormat swapChainImageFormat;
-        VkExtent2D swapChainExtent;
+        VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+        VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;
+        VkExtent2D swapChainExtent = {};
         std::vector<VkImage> swapChainImages;
         std::vector<VkImageView> swapChainImageViews;
 
         // Framebuffer related members
-        VkRenderPass renderPass;
-        VkFramebuffer framebuffer;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> swapChainFramebuffers;
 
-        VkPipelineLayout graphicsPipelineLayout;
+        VkPipelineLayout graphicsPipelineLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout fullscreenDescriptorSetLayout = VK_NULL_HANDLE; 
+        VkDescriptorPool fullscreenDescriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet fullscreenDescriptorSet = VK_NULL_HANDLE;
+
+        VkSampler sampler = VK_NULL_HANDLE;
+
         std::vector<VkPipeline> pipelines;
 
         // command buffers related members
-        VkCommandPool commandPool;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> commandBuffers;
 
         // synchronization related members
@@ -340,29 +210,34 @@ class VulkanContext {
         size_t currentFrame = 0;
 
         // ray tracing related members
-        VkImage rayOutputImage;
-        VkDeviceMemory rayOutputMemory;
-        VkImageView rayOutputImageView;
-        VkDescriptorSetLayout rayDescriptorSetLayout;
-        VkDescriptorPool rayDescriptorPool;
-        VkDescriptorSet rayDescriptorSet;
-        VkStridedDeviceAddressRegionKHR raygenRegion;
-        VkStridedDeviceAddressRegionKHR missRegion;
-        VkStridedDeviceAddressRegionKHR hitRegion;
+        VkImage rayOutputImage = VK_NULL_HANDLE;
+        VkDeviceMemory rayOutputMemory = VK_NULL_HANDLE;
+        VkImageView rayOutputImageView = VK_NULL_HANDLE;
+        VkDescriptorSetLayout rayDescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool rayDescriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSet rayDescriptorSet = VK_NULL_HANDLE;
+        VkStridedDeviceAddressRegionKHR raygenRegion {};
+        VkStridedDeviceAddressRegionKHR missRegion {};
+        VkStridedDeviceAddressRegionKHR hitRegion {};
         VkStridedDeviceAddressRegionKHR callableRegion{};
-        VkBuffer raySBTBuffer;
-        VkDeviceMemory raySBTMemory;
-        VkPipelineLayout rayPipelineLayout;
+        VkBuffer raySBTBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory raySBTMemory = VK_NULL_HANDLE;
+        VkPipelineLayout rayPipelineLayout = VK_NULL_HANDLE;
 
-        // blas related members
-        // VkBuffer vertexBuffer;
-        // VkDeviceMemory vertexBufferMemory;
+        VkBuffer vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
 
-        AccelerationStructure blas;
-        AccelerationStructure tlas;
+        AccelerationStructure blas = {};
+        AccelerationStructure tlas = {};
 
 
         bool framebufferResized = false;
+
+        VkImageUsageFlags usage =
+        VK_IMAGE_USAGE_STORAGE_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT;
                 
         const std::vector<const char*> validationLayers = {
             "VK_LAYER_KHRONOS_validation"
@@ -656,7 +531,6 @@ class VulkanContext {
             createInfo.pUserData = nullptr; // Optional
         }
 
-        
         void validateSBTRegions(uint32_t groupCount, uint32_t handleAlignment) {
             // assert(groupCount >= 3 && "Expected at least 3 shader groups: raygen, miss, hit");
 
@@ -902,6 +776,80 @@ class VulkanContext {
             }
         }
 
+        void createRenderPass() {
+            // Color attachment
+            VkAttachmentDescription colorAttachment{};
+            colorAttachment.format = swapChainImageFormat;
+            colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+
+            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+            colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+            colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+            // Attachment reference
+            VkAttachmentReference colorAttachmentRef{};
+            colorAttachmentRef.attachment = 0;
+            colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+            // Subpass
+            VkSubpassDescription subpass{};
+            subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            subpass.colorAttachmentCount = 1;
+            subpass.pColorAttachments = &colorAttachmentRef;
+
+            // Subpass dependency (synchronization)
+            VkSubpassDependency dependency{};
+            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+            dependency.dstSubpass = 0;
+
+            dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dependency.srcAccessMask = 0;
+
+            dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+            // Create Render Pass
+            VkRenderPassCreateInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+            renderPassInfo.attachmentCount = 1;
+            renderPassInfo.pAttachments = &colorAttachment;
+            renderPassInfo.subpassCount = 1;
+            renderPassInfo.pSubpasses = &subpass;
+            renderPassInfo.dependencyCount = 1;
+            renderPassInfo.pDependencies = &dependency;
+
+            if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create render pass");
+            }
+        }
+
+        void createFramebuffers() {
+            swapChainFramebuffers.resize(swapChainImageViews.size());
+
+            for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+                VkImageView attachments[] = {
+                    swapChainImageViews[i]
+                };
+
+                VkFramebufferCreateInfo framebufferInfo{};
+                framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                framebufferInfo.renderPass = renderPass;
+                framebufferInfo.attachmentCount = 1;
+                framebufferInfo.pAttachments = attachments;
+                framebufferInfo.width = swapChainExtent.width;
+                framebufferInfo.height = swapChainExtent.height;
+                framebufferInfo.layers = 1;
+
+                if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("Failed to create framebuffer!");
+                }
+            }
+        }
 
         // creating this to create the raytracing pipeline
         void createRayPipeline() {
@@ -983,9 +931,9 @@ class VulkanContext {
             pipelineInfo.layout = rayPipelineLayout;
             pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // No base pipeline
             pipelineInfo.basePipelineIndex = -1; // No base pipeline index
-            pipelines.resize(1); // Resize to hold the ray tracing pipeline
+            pipelines.resize(2); // Resize to hold the ray tracing pipeline
 
-            if (vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[0]) != VK_SUCCESS) {
+            if (vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[1]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create ray tracing pipeline!");
             }
 
@@ -1000,7 +948,7 @@ class VulkanContext {
             VkImageCreateInfo imageInfo{};
             imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             imageInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM; // Use a format suitable for ray tracing output
+            imageInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT; // Use a format suitable for ray tracing output
             imageInfo.extent.width = swapChainExtent.width;
             imageInfo.extent.height = swapChainExtent.height;
             imageInfo.extent.depth = 1;
@@ -1008,7 +956,7 @@ class VulkanContext {
             imageInfo.arrayLayers = 1;
             imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
             imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // Storage for ray tracing output
+            imageInfo.usage = usage; // Storage for ray tracing output
             imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -1041,7 +989,7 @@ class VulkanContext {
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             viewInfo.image = rayOutputImage;
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM; // Same format as the image
+            viewInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT; // Same format as the image
             viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
             viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
             viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1108,6 +1056,7 @@ class VulkanContext {
             VkDescriptorImageInfo storageImageInfo{};
             storageImageInfo.imageView = rayOutputImageView;
             storageImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            storageImageInfo.sampler = sampler;
 
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1147,7 +1096,7 @@ class VulkanContext {
                 throw std::runtime_error("Shader handle storage size too small!");
             }
 
-            if (vkGetRayTracingShaderGroupHandlesKHR(device, pipelines[0], 0, groupCount, sbtSize, shaderHandleStorage.data()) != VK_SUCCESS) {
+            if (vkGetRayTracingShaderGroupHandlesKHR(device, pipelines[1], 0, groupCount, sbtSize, shaderHandleStorage.data()) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to get shader group handles!");
             }
 
@@ -1239,9 +1188,6 @@ class VulkanContext {
                 0.0f,  1.0f, 0.0f
             };
 
-
-            VkBuffer vertexBuffer;
-            VkDeviceMemory vertexMemory;
             VkDeviceSize bufferSize = sizeof(float) * vertices.size();
 
             createBuffer(bufferSize,
@@ -1571,67 +1517,38 @@ class VulkanContext {
 
             transitionImageLayout(commandBuffer, rayOutputImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-            // VkRenderPassBeginInfo renderPassInfo{};
-            // renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            // renderPassInfo.renderPass = renderPass;
-            // renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-            // renderPassInfo.renderArea.offset = {0, 0};
-            // renderPassInfo.renderArea.extent = swapChainExtent;
-
-            // VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-            // renderPassInfo.clearValueCount = 1;
-            // renderPassInfo.pClearValues = &clearColor;
-
-            // vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            // vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
-            
-            // VkViewport viewport{};
-            // viewport.x = 0.0f;
-            // viewport.y = 0.0f;
-            // viewport.width  = (float) swapChainExtent.width;
-            // viewport.height = (float) swapChainExtent.height;
-            // viewport.minDepth = 0.0f;
-            // viewport.maxDepth = 1.0f;
-            // vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-            // VkRect2D scissor{};
-            // scissor.offset = {0, 0};
-            // scissor.extent = swapChainExtent;
-            // vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-            // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-            // vkCmdEndRenderPass(commandBuffer);
-
             // bind ray tracing pipeline
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines[0]);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines[1]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rayPipelineLayout, 0, 1, &rayDescriptorSet, 0, nullptr);
             
             vkCmdTraceRaysKHR(commandBuffer, &raygenRegion, &missRegion, &hitRegion, &callableRegion, swapChainExtent.width, swapChainExtent.height, 1);
             
-            transitionImageLayout(commandBuffer, rayOutputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            transitionImageLayout(commandBuffer, rayOutputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            transitionImageLayout(commandBuffer, swapChainImages[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-            transitionImageLayout(commandBuffer, swapChainImages[imageIndex],  VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VkRenderPassBeginInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = renderPass;
+            renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+            renderPassInfo.renderArea.offset = {0, 0};
+            renderPassInfo.renderArea.extent = swapChainExtent;
 
-            VkImageCopy copyRegion{};
-            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.srcSubresource.mipLevel = 0;
-            copyRegion.srcSubresource.baseArrayLayer = 0;
-            copyRegion.srcSubresource.layerCount = 1;
+            VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues = &clearColor;
 
-            copyRegion.dstSubresource = copyRegion.srcSubresource;
+            vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-            copyRegion.extent.width = swapChainExtent.width;
-            copyRegion.extent.height = swapChainExtent.height;
-            copyRegion.extent.depth = 1;
+            // Bind fullscreen graphics pipeline
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
 
-            vkCmdCopyImage(
-                commandBuffer,
-                rayOutputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                swapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &copyRegion
-            );
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelineLayout, 0, 1, &fullscreenDescriptorSet, 0, nullptr);
 
-            transitionImageLayout(commandBuffer, swapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+            vkCmdEndRenderPass(commandBuffer);
+
+            transitionImageLayout(commandBuffer, swapChainImages[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
             if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
                 throw std::runtime_error("failed to record command buffer!");
@@ -1688,6 +1605,27 @@ class VulkanContext {
                 srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
                 dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             }
+            else if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+                srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
+            else if (oldLayout == VK_IMAGE_LAYOUT_GENERAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                srcStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+                dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            }
+            else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+                barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+
+                srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                dstStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+            }
             else {
                 throw std::invalid_argument("unsupported layout transition!");
             }
@@ -1702,6 +1640,125 @@ class VulkanContext {
             );
         }
 
+        // this function is for the fullscree
+        void createFullscreenPipeline() {
+            auto vertShaderCode = readFile("shaders/fullscreen/vert.spv");
+            auto fragShaderCode = readFile("shaders/fullscreen/frag.spv");
+
+            VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+            VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+            VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+            vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+            vertShaderStageInfo.module = vertShaderModule;
+            vertShaderStageInfo.pName = "main";
+
+            VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+            fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            fragShaderStageInfo.module = fragShaderModule;
+            fragShaderStageInfo.pName = "main";
+
+            VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+            VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+            vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+            VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+            inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChainExtent.width);
+            viewport.height = static_cast<float>(swapChainExtent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = swapChainExtent;
+
+            VkPipelineViewportStateCreateInfo viewportState{};
+            viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            viewportState.viewportCount = 1;
+            viewportState.pViewports = &viewport;
+            viewportState.scissorCount = 1;
+            viewportState.pScissors = &scissor;
+
+            VkPipelineRasterizationStateCreateInfo rasterizer{};
+            rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+            rasterizer.depthClampEnable = VK_FALSE;
+            rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+            rasterizer.lineWidth = 1.0f;
+            rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+            rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+
+            VkPipelineMultisampleStateCreateInfo multisampling{};
+            multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+            multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+            VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+            VkPipelineColorBlendStateCreateInfo colorBlending{};
+            colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            colorBlending.logicOpEnable = VK_FALSE;
+            colorBlending.logicOp = VK_LOGIC_OP_COPY;   
+            colorBlending.attachmentCount = 1;
+            colorBlending.pAttachments = &colorBlendAttachment;
+
+            VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+            pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pipelineLayoutInfo.setLayoutCount = 1;
+            pipelineLayoutInfo.pSetLayouts = &rayDescriptorSetLayout;
+
+            if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &graphicsPipelineLayout) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create pipeline layout!");
+
+            VkGraphicsPipelineCreateInfo pipelineInfo{};
+            pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            pipelineInfo.stageCount = 2;
+            pipelineInfo.pStages = shaderStages;
+            pipelineInfo.pVertexInputState = &vertexInputInfo;
+            pipelineInfo.pInputAssemblyState = &inputAssembly;
+            pipelineInfo.pViewportState = &viewportState;
+            pipelineInfo.pRasterizationState = &rasterizer;
+            pipelineInfo.pMultisampleState = &multisampling;
+            pipelineInfo.pColorBlendState = &colorBlending;
+            pipelineInfo.layout = graphicsPipelineLayout;
+            pipelineInfo.renderPass = renderPass;
+            pipelineInfo.subpass = 0;
+            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+            pipelineInfo.basePipelineIndex = -1;
+            pipelines.resize(1); // Resize to hold both ray tracing and fullscreen pipelines
+
+            if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[0]) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create graphics pipeline!");
+
+            // Cleanup
+            vkDestroyShaderModule(device, fragShaderModule, nullptr);
+            vkDestroyShaderModule(device, vertShaderModule, nullptr);
+        }
+
+        void createSampler() {
+            VkSamplerCreateInfo samplerInfo{};
+            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            samplerInfo.magFilter = VK_FILTER_LINEAR;
+            samplerInfo.minFilter = VK_FILTER_LINEAR;
+            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.anisotropyEnable = VK_FALSE;
+            samplerInfo.maxAnisotropy = 1.0f;
+
+            if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
+                throw std::runtime_error("failed to create sampler!");
+        }
+
 
         // function to handle window resizing
         void recreateSwapChain(GLFWwindow* window) {
@@ -1714,63 +1771,180 @@ class VulkanContext {
             }
 
             vkDeviceWaitIdle(device);
-
-            if (!commandBuffers.empty()) {
-                vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
-                commandBuffers.clear();
-            }
-
-            // cleanupSwapChain();     // You'll need to write this
-            // createSwapChain(window); // Already done
-            // createImageViews();     // Already done
-            // // createRenderPass();
-            // // createGraphicsPipeline(); // Already done
-            // createRayTracingPipeline(); // Already done
-            // createRayOutputImage(); // Already done
-            // createRayDescriptorSet(); // Already done
-            // createTLAS();          // Already done
-            // createFramebuffers();   // Already done
-            
-            // createCommandBuffers(); // Already done
         }
 
-        void cleanupSwapChain() {
-            for (auto framebuffer : swapChainFramebuffers) {
-                vkDestroyFramebuffer(device, framebuffer, nullptr);
+        void cleanupRayTracing() {
+            if (rayOutputImageView != VK_NULL_HANDLE) {
+                vkDestroyImageView(device, rayOutputImageView, nullptr);
+                rayOutputImageView = VK_NULL_HANDLE;
             }
-            swapChainFramebuffers.clear();
-
-            for (auto imageView : swapChainImageViews) {
-                vkDestroyImageView(device, imageView, nullptr);
+            if (rayOutputImage != VK_NULL_HANDLE) {
+                vkDestroyImage(device, rayOutputImage, nullptr);
+                rayOutputImage = VK_NULL_HANDLE;
             }
-            swapChainImageViews.clear();
-
-            if (!pipelines.empty()) {
-                for (auto pipeline : pipelines) {
-                    vkDestroyPipeline(device, pipeline, nullptr);
-                }
-                pipelines.clear();
+            if (rayOutputMemory != VK_NULL_HANDLE) {
+                vkFreeMemory(device, rayOutputMemory, nullptr);
+                rayOutputMemory = VK_NULL_HANDLE;
             }
-
+            if (rayDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(device, rayDescriptorSetLayout, nullptr);
+                rayDescriptorSetLayout = VK_NULL_HANDLE;
+            }
+            if (rayDescriptorPool != VK_NULL_HANDLE) {
+                vkDestroyDescriptorPool(device, rayDescriptorPool, nullptr);
+                rayDescriptorPool = VK_NULL_HANDLE;
+            }
+            if (raySBTBuffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(device, raySBTBuffer, nullptr);
+                raySBTBuffer = VK_NULL_HANDLE;
+            }
+            if (raySBTMemory != VK_NULL_HANDLE) {
+                vkFreeMemory(device, raySBTMemory, nullptr);
+                raySBTMemory = VK_NULL_HANDLE;
+            }
             if (rayPipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(device, rayPipelineLayout, nullptr);
+                rayPipelineLayout = VK_NULL_HANDLE;
+            }
+        }
+
+        void cleanupFullscreen() {
+
+            if (sampler != VK_NULL_HANDLE) {
+                vkDestroySampler(device, sampler, nullptr);
+                sampler = VK_NULL_HANDLE;
             }
 
             if (graphicsPipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(device, graphicsPipelineLayout, nullptr);
+                graphicsPipelineLayout = VK_NULL_HANDLE;
+            }
+        }
+
+        void cleanupAccelerationStructures() {
+            // BLAS
+            if (blas.handle != VK_NULL_HANDLE) {
+                vkDestroyAccelerationStructureKHR(device, blas.handle, nullptr);
+                blas.handle = VK_NULL_HANDLE;
+            }
+            if (blas.buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(device, blas.buffer, nullptr);
+                blas.buffer = VK_NULL_HANDLE;
+            }
+            if (blas.memory != VK_NULL_HANDLE) {
+                vkFreeMemory(device, blas.memory, nullptr);
+                blas.memory = VK_NULL_HANDLE;
+            }
+            blas.deviceAddress = 0;
+
+            if (vertexBuffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(device, vertexBuffer, nullptr);
+                vertexBuffer = VK_NULL_HANDLE;
+            }
+
+            if (vertexMemory != VK_NULL_HANDLE) {
+                vkFreeMemory(device, vertexMemory, nullptr);
+                vertexMemory = VK_NULL_HANDLE;
+            }
+
+            // TLAS
+            if (tlas.handle != VK_NULL_HANDLE) {
+                vkDestroyAccelerationStructureKHR(device, tlas.handle, nullptr);
+                tlas.handle = VK_NULL_HANDLE;
+            }
+            if (tlas.buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(device, tlas.buffer, nullptr);
+                tlas.buffer = VK_NULL_HANDLE;
+            }
+            if (tlas.memory != VK_NULL_HANDLE) {
+                vkFreeMemory(device, tlas.memory, nullptr);
+                tlas.memory = VK_NULL_HANDLE;
+            }
+            tlas.deviceAddress = 0;
+        }
+
+        void cleanupSyncObjects() {
+            for (auto semaphore : imageAvailableSemaphores) {
+                if (semaphore != VK_NULL_HANDLE)
+                    vkDestroySemaphore(device, semaphore, nullptr);
+            }
+            imageAvailableSemaphores.clear();
+
+            for (auto semaphore : renderFinishedSemaphores) {
+                if (semaphore != VK_NULL_HANDLE)
+                    vkDestroySemaphore(device, semaphore, nullptr);
+            }
+            renderFinishedSemaphores.clear();
+
+            for (auto fence : inFlightFences) {
+                if (fence != VK_NULL_HANDLE)
+                    vkDestroyFence(device, fence, nullptr);
+            }
+            inFlightFences.clear();
+
+            imagesInFlight.clear();  // Assuming this is just a vector of fences or handles
+        }
+
+        void cleanupSwapChain() {
+            for (auto framebuffer : swapChainFramebuffers) {
+                if (framebuffer != VK_NULL_HANDLE)
+                    vkDestroyFramebuffer(device, framebuffer, nullptr);
+            }
+            swapChainFramebuffers.clear();
+
+            for (auto imageView : swapChainImageViews) {
+                if (imageView != VK_NULL_HANDLE)
+                    vkDestroyImageView(device, imageView, nullptr);
+            }
+            swapChainImageViews.clear();
+
+            if (swapChain != VK_NULL_HANDLE) {
+                vkDestroySwapchainKHR(device, swapChain, nullptr);
+                swapChain = VK_NULL_HANDLE;
             }
 
             if (renderPass != VK_NULL_HANDLE) {
                 vkDestroyRenderPass(device, renderPass, nullptr);
                 renderPass = VK_NULL_HANDLE;
             }
+        }
 
-            if (swapChain != VK_NULL_HANDLE) {
-                vkDestroySwapchainKHR(device, swapChain, nullptr);
-                swapChain = VK_NULL_HANDLE;
+        void cleanupPipelinesAndLayouts() {
+            for (auto pipeline : pipelines) {
+                if (pipeline != VK_NULL_HANDLE)
+                    vkDestroyPipeline(device, pipeline, nullptr);
+            }
+            pipelines.clear();
+        }
+
+        void cleanupCommandBuffersAndPool() {
+            if (!commandBuffers.empty()) {
+                vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+                commandBuffers.clear();
+            }
+
+            if (commandPool != VK_NULL_HANDLE) {
+                vkDestroyCommandPool(device, commandPool, nullptr);
+                commandPool = VK_NULL_HANDLE;
             }
         }
 
+        void cleanupSurfaceAndInstance() {
+            if (surface != VK_NULL_HANDLE) {
+                vkDestroySurfaceKHR(instance, surface, nullptr);
+                surface = VK_NULL_HANDLE;
+            }
+
+            if (enableValidationLayers && debugMessenger != VK_NULL_HANDLE) {
+                DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+                debugMessenger = VK_NULL_HANDLE;
+            }
+
+            if (instance != VK_NULL_HANDLE) {
+                vkDestroyInstance(instance, nullptr);
+                instance = VK_NULL_HANDLE;
+            }
+        }
 
 };
 
