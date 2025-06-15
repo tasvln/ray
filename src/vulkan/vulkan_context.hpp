@@ -24,7 +24,7 @@
 // put all infos inside their brackets: c++20
 // section each parts into a separate file
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAX_FRAMES_IN_FLIGHT = 3;
  
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
@@ -46,6 +46,11 @@ struct AccelerationStructure {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
     VkDeviceAddress deviceAddress = 0;
+};
+
+enum PipelineType {
+    PIPELINE_RAY_TRACING = 0,
+    PIPELINE_FULLSCREEN = 1
 };
 
 // Function to create a debug messenger
@@ -71,35 +76,72 @@ class VulkanContext {
         VulkanContext(const Window& window) {
             volkInitialize();
             createInstance();
+            std::cout << "Instance Created" << std::endl;
             setupDebugMessenger();
             volkLoadInstance(instance);
             createSurface(window);
+            std::cout << "Surface Created" << std::endl;
             pickPhysicalDevice();
+            std::cout << "Physical Device Created" << std::endl;
             createLogicalDevice();
+            std::cout << "Logical Device Created" << std::endl;
             volkLoadDevice(device);
 
             createSwapChain(window.getWindow());
+            std::cout << "Swap chain Created" << std::endl;
             createImageViews();
-
-            createCommandPool();
+            std::cout << "Image Views Created" << std::endl;
 
             createRenderPass();
+            std::cout << "Render Pass Created" << std::endl;
+
             createSampler();
+            std::cout << "Sampler Created" << std::endl;
             
             // ray tracing related
             createRayDescriptorSetLayout();
-            createRayDescriptorPool();
-            createBLAS();
-            createRayOutputImage();
-            createRayDescriptorSet();
-            createRayPipeline();
-            createShaderBindingTable();
+            std::cout << "Ray DSL Created" << std::endl;
+            createFullscreenDescriptorSetLayout();
+            std::cout << "FS DSL Created" << std::endl;
+            
+            pipelines.resize(2);
 
+            createRayDescriptorPool();
+            std::cout << "Ray DSP Created" << std::endl;
+            createFullscreenDescriptorPool();
+            std::cout << "FS DSP Created" << std::endl;
+
+            createRayOutputImage();
+            std::cout << "Ray Output Image Created" << std::endl;
+
+            createRayDescriptorSet();
+            std::cout << "Ray DS Created" << std::endl;
+            createFullscreenDescriptorSet();
+            std::cout << "FS DS Created" << std::endl;
+
+            createCommandPool();
+            std::cout << "Command Pool Created" << std::endl;
+
+            createBLAS();
+            std::cout << "BLAS Created" << std::endl;
+            createTLAS();
+            std::cout << "TLAS Created" << std::endl;
+
+            createRayPipeline();
+            std::cout << "Ray Pipeline Created" << std::endl;
             createFullscreenPipeline();
+            std::cout << "FS Pipeline Created" << std::endl;
+            
+            createShaderBindingTable();
+            std::cout << "Ray SBT Created" << std::endl;
+
             createFramebuffers();
+            std::cout << "Framebuffers Created" << std::endl;
 
             createCommandBuffers();
+            std::cout << "Command buffers Created" << std::endl;
             createSyncObjects();
+            std::cout << "SO Created" << std::endl;
         }
 
         ~VulkanContext() {
@@ -122,33 +164,96 @@ class VulkanContext {
 
         // main.cpp functions
         void drawFrame() {
-            vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-            vkResetFences(device, 1, &inFlightFences[currentFrame]);
+            std::cout << "drawFrame: currentFrame = " << currentFrame << std::endl;
+            std::cout << "  inFlightFences.size() = " << inFlightFences.size() << std::endl;
+            std::cout << "  imageAvailableSemaphores.size() = " << imageAvailableSemaphores.size() << std::endl;
+            std::cout << "  renderFinishedSemaphores.size() = " << renderFinishedSemaphores.size() << std::endl;
+            std::cout << "  commandBuffers.size() = " << commandBuffers.size() << std::endl;
+            std::cout << "  imagesInFlight.size() = " << imagesInFlight.size() << std::endl;
+
+            if (currentFrame >= inFlightFences.size()) {
+                std::cout << "  ERROR: currentFrame out of range for inFlightFences!" << std::endl;
+                return;
+            }
+            if (currentFrame >= imageAvailableSemaphores.size()) {
+                std::cout << "  ERROR: currentFrame out of range for imageAvailableSemaphores!" << std::endl;
+                return;
+            }
+            if (currentFrame >= renderFinishedSemaphores.size()) {
+                std::cout << "  ERROR: currentFrame out of range for renderFinishedSemaphores!" << std::endl;
+                return;
+            }
+            if (currentFrame >= commandBuffers.size()) {
+                std::cout << "  ERROR: currentFrame out of range for commandBuffers!" << std::endl;
+                return;
+            }
+
+            vkWaitForFences(device, 1, &inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
 
             uint32_t imageIndex;
-            vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+            VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX,
+                imageAvailableSemaphores.at(currentFrame), VK_NULL_HANDLE, &imageIndex);
 
-            // Record commands before submitting!
-            recordCommandBuffer(commandBuffers[imageIndex], imageIndex);
+            std::cout << "  vkAcquireNextImageKHR returned: " << result << std::endl;
+            std::cout << "  imageIndex = " << imageIndex << std::endl;
+            std::cout << "  imagesInFlight.size() = " << imagesInFlight.size() << std::endl;
+            std::cout << "  renderFinishedSemaphores.size() = " << renderFinishedSemaphores.size() << std::endl;
+
+            if (imageIndex >= imagesInFlight.size()) {
+                std::cout << "  ERROR: imageIndex out of range for imagesInFlight!" << std::endl;
+                return;
+            }
+            if (imageIndex >= renderFinishedSemaphores.size()) {
+                std::cout << "  ERROR: imageIndex out of range for renderFinishedSemaphores!" << std::endl;
+                return;
+            }
+
+            if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+                // Handle swapchain recreation here
+                // recreateSwapChain();
+                std::cout << "  Swapchain out of date - need to recreate." << std::endl;
+                return;
+            } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+                throw std::runtime_error("Failed to acquire swap chain image!");
+            }
+
+            std::cout << "imagesInFlight[" << imageIndex << "] = " << imagesInFlight[imageIndex] << std::endl;
+
+
+            if (imagesInFlight.at(imageIndex) != VK_NULL_HANDLE) {
+                vkWaitForFences(device, 1, &imagesInFlight.at(imageIndex), VK_TRUE, UINT64_MAX);
+            }
+
+            imagesInFlight.at(imageIndex) = inFlightFences.at(currentFrame);
+
+            vkResetFences(device, 1, &inFlightFences.at(currentFrame));
+            // vkResetCommandBuffer(commandBuffers.at(currentFrame), 0);
+
+            // Record commands for current frame
+            recordCommandBuffer(commandBuffers.at(currentFrame), imageIndex);
+
+            VkSemaphore imageAvailable = imageAvailableSemaphores.at(currentFrame);
+            VkSemaphore renderFinished = renderFinishedSemaphores.at(currentFrame);
 
             VkSubmitInfo submitInfo{};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+            VkSemaphore waitSemaphores[] = { imageAvailable };
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
             submitInfo.waitSemaphoreCount = 1;
             submitInfo.pWaitSemaphores = waitSemaphores;
             submitInfo.pWaitDstStageMask = waitStages;
 
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+            submitInfo.pCommandBuffers = &commandBuffers.at(currentFrame);
 
-            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+            VkSemaphore signalSemaphores[] = { renderFinished };
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
-            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to submit draw command buffer!");
+            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences.at(currentFrame)) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to submit draw command buffer!");
             }
 
             VkPresentInfoKHR presentInfo{};
@@ -162,7 +267,15 @@ class VulkanContext {
             presentInfo.pSwapchains = swapChains;
             presentInfo.pImageIndices = &imageIndex;
 
-            vkQueuePresentKHR(presentQueue, &presentInfo);
+            result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+                framebufferResized = false;
+                // recreateSwapChain();
+                std::cout << "  Swapchain needs recreation after present." << std::endl;
+            } else if (result != VK_SUCCESS) {
+                throw std::runtime_error("Failed to present swap chain image!");
+            }
 
             currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
@@ -189,7 +302,7 @@ class VulkanContext {
         VkRenderPass renderPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> swapChainFramebuffers;
 
-        VkPipelineLayout graphicsPipelineLayout = VK_NULL_HANDLE;
+        VkPipelineLayout fullscreenPipelineLayout = VK_NULL_HANDLE;
         VkDescriptorSetLayout fullscreenDescriptorSetLayout = VK_NULL_HANDLE; 
         VkDescriptorPool fullscreenDescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet fullscreenDescriptorSet = VK_NULL_HANDLE;
@@ -931,9 +1044,8 @@ class VulkanContext {
             pipelineInfo.layout = rayPipelineLayout;
             pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // No base pipeline
             pipelineInfo.basePipelineIndex = -1; // No base pipeline index
-            pipelines.resize(2); // Resize to hold the ray tracing pipeline
 
-            if (vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[1]) != VK_SUCCESS) {
+            if (vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[PIPELINE_RAY_TRACING]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create ray tracing pipeline!");
             }
 
@@ -956,7 +1068,7 @@ class VulkanContext {
             imageInfo.arrayLayers = 1;
             imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
             imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            imageInfo.usage = usage; // Storage for ray tracing output
+            imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT; // Storage for ray tracing output
             imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -1002,6 +1114,10 @@ class VulkanContext {
 
             if (vkCreateImageView(device, &viewInfo, nullptr, &rayOutputImageView) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create ray output image view!");
+            }
+
+            if (rayOutputImageView == VK_NULL_HANDLE) {
+                std::cout << "Failed to create ray output image view" << std::endl;  
             }
         }
 
@@ -1056,7 +1172,6 @@ class VulkanContext {
             VkDescriptorImageInfo storageImageInfo{};
             storageImageInfo.imageView = rayOutputImageView;
             storageImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            storageImageInfo.sampler = sampler;
 
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1086,17 +1201,18 @@ class VulkanContext {
             // 2. Calculate sizes with proper alignment
             uint32_t groupCount = 3;
             uint32_t handleSizeAligned = alignUp(handleSize, handleAlignment);
-            // uint32_t sbtSize = groupCount * handleSizeAligned;
-            uint32_t sbtSize = groupCount * handleAlignment;
+            uint32_t sbtSize = groupCount * handleSizeAligned;
+            // uint32_t sbtSize = groupCount * handleAlignment;
 
             // 3. Get shader group handles from the pipeline
             std::vector<uint8_t> shaderHandleStorage(sbtSize);
 
-            if (shaderHandleStorage.size() < groupCount * handleAlignment) {
+            if (shaderHandleStorage.size() < groupCount * handleSize) {
                 throw std::runtime_error("Shader handle storage size too small!");
             }
 
-            if (vkGetRayTracingShaderGroupHandlesKHR(device, pipelines[1], 0, groupCount, sbtSize, shaderHandleStorage.data()) != VK_SUCCESS) {
+
+            if (vkGetRayTracingShaderGroupHandlesKHR(device, pipelines[PIPELINE_RAY_TRACING], 0, groupCount, sbtSize, shaderHandleStorage.data()) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to get shader group handles!");
             }
 
@@ -1113,7 +1229,11 @@ class VulkanContext {
             // 5. Copy shader group handles into buffer
             void* mappedData;
             vkMapMemory(device, raySBTMemory, 0, sbtSize, 0, &mappedData);
-            memcpy(mappedData, shaderHandleStorage.data(), sbtSize);
+            uint8_t* pData = reinterpret_cast<uint8_t*>(mappedData);
+            for (uint32_t i = 0; i < groupCount; i++) {
+                memcpy(pData + i * handleSizeAligned, shaderHandleStorage.data() + i * handleSize, handleSize);
+                // Zero padding can be done optionally for the remaining bytes
+            }
             vkUnmapMemory(device, raySBTMemory);
 
             // 6. Get device address of SBT buffer
@@ -1123,17 +1243,18 @@ class VulkanContext {
             VkDeviceAddress sbtAddress = vkGetBufferDeviceAddress(device, &addressInfo);
 
             // 7. Fill in strided regions (used in vkCmdTraceRaysKHR)
-            raygenRegion.deviceAddress = sbtAddress + 0 * handleAlignment;
-            raygenRegion.stride = handleAlignment;
-            raygenRegion.size = handleAlignment;
+            raygenRegion.deviceAddress = sbtAddress + 0 * handleSizeAligned;
+            raygenRegion.stride = handleSizeAligned;
+            raygenRegion.size = handleSizeAligned;
 
-            missRegion.deviceAddress = sbtAddress + 1 * handleAlignment;
-            missRegion.stride = handleAlignment;
-            missRegion.size = handleAlignment;
+            missRegion.deviceAddress = sbtAddress + 1 * handleSizeAligned;
+            missRegion.stride = handleSizeAligned;
+            missRegion.size = handleSizeAligned;
 
-            hitRegion.deviceAddress = sbtAddress + 2 * handleAlignment;
-            hitRegion.stride = handleAlignment;
-            hitRegion.size = handleAlignment;
+            hitRegion.deviceAddress = sbtAddress + 2 * handleSizeAligned;
+            hitRegion.stride = handleSizeAligned;
+            hitRegion.size = handleSizeAligned;
+
 
             // Optional: callable shaders
             callableRegion.deviceAddress = 0;
@@ -1389,11 +1510,19 @@ class VulkanContext {
             VkCommandBuffer commandBuffer;
             vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
+            // if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+            //     throw std::runtime_error("Failed to allocate single time command buffer");
+            // }
+
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
             vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+            // if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+            //     throw std::runtime_error("Failed to begin single time command buffer");
+            // }
 
             return commandBuffer;
         }
@@ -1463,7 +1592,7 @@ class VulkanContext {
         }
 
         void createCommandBuffers() {
-            commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+            commandBuffers.resize(swapChainImages.size());
 
             VkCommandBufferAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1477,11 +1606,10 @@ class VulkanContext {
         }
 
         void createSyncObjects() {
-            imageAvailableSemaphores.resize(swapChainImages.size());
-            renderFinishedSemaphores.resize(swapChainImages.size());
-            imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
-
+            imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+            renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
             inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+            imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
 
             VkSemaphoreCreateInfo semaphoreInfo{};
             semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1490,22 +1618,23 @@ class VulkanContext {
             fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
             fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // So first frame doesn't hang
 
-            for (size_t i = 0; i < swapChainImages.size(); i++) {
-                if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
-                    throw std::runtime_error("Failed to create semaphores for a swap chain image!");
-                }
-            }
-
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-                if (vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-                    throw std::runtime_error("Failed to create in-flight fence!");
+                if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                    vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                    vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("Failed to create synchronization objects for a frame!");
                 }
             }
         }
 
+
         // main.cpp functions
         void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+            std::cout << "recordCommandBuffer: imageIndex = " << imageIndex << std::endl;
+            std::cout << "  swapChainImages size: " << swapChainImages.size() << std::endl;
+            std::cout << "  swapChainFramebuffers size: " << swapChainFramebuffers.size() << std::endl;
+            std::cout << "  commandBuffers size: " << commandBuffers.size() << std::endl;
+
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = 0; // Optional
@@ -1518,7 +1647,7 @@ class VulkanContext {
             transitionImageLayout(commandBuffer, rayOutputImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
             // bind ray tracing pipeline
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines[1]);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipelines[PIPELINE_RAY_TRACING]);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rayPipelineLayout, 0, 1, &rayDescriptorSet, 0, nullptr);
             
             vkCmdTraceRaysKHR(commandBuffer, &raygenRegion, &missRegion, &hitRegion, &callableRegion, swapChainExtent.width, swapChainExtent.height, 1);
@@ -1540,9 +1669,9 @@ class VulkanContext {
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
             // Bind fullscreen graphics pipeline
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[0]);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[PIPELINE_FULLSCREEN]);
 
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelineLayout, 0, 1, &fullscreenDescriptorSet, 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fullscreenPipelineLayout, 0, 1, &fullscreenDescriptorSet, 0, nullptr);
 
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -1625,6 +1754,20 @@ class VulkanContext {
 
                 srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                 dstStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+            }
+            else if (oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+                barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                barrier.dstAccessMask = 0;
+
+                srcStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            }
+            else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+                srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             }
             else {
                 throw std::invalid_argument("unsupported layout transition!");
@@ -1714,9 +1857,9 @@ class VulkanContext {
             VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
             pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutInfo.setLayoutCount = 1;
-            pipelineLayoutInfo.pSetLayouts = &rayDescriptorSetLayout;
+            pipelineLayoutInfo.pSetLayouts = &fullscreenDescriptorSetLayout;
 
-            if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &graphicsPipelineLayout) != VK_SUCCESS)
+            if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &fullscreenPipelineLayout) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create pipeline layout!");
 
             VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1729,19 +1872,81 @@ class VulkanContext {
             pipelineInfo.pRasterizationState = &rasterizer;
             pipelineInfo.pMultisampleState = &multisampling;
             pipelineInfo.pColorBlendState = &colorBlending;
-            pipelineInfo.layout = graphicsPipelineLayout;
+            pipelineInfo.layout = fullscreenPipelineLayout;
             pipelineInfo.renderPass = renderPass;
             pipelineInfo.subpass = 0;
             pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
             pipelineInfo.basePipelineIndex = -1;
-            pipelines.resize(1); // Resize to hold both ray tracing and fullscreen pipelines
 
-            if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[0]) != VK_SUCCESS)
+            if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipelines[PIPELINE_FULLSCREEN]) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create graphics pipeline!");
 
             // Cleanup
             vkDestroyShaderModule(device, fragShaderModule, nullptr);
             vkDestroyShaderModule(device, vertShaderModule, nullptr);
+        }
+
+        void createFullscreenDescriptorSetLayout() {
+            VkDescriptorSetLayoutBinding samplerBinding{};
+            samplerBinding.binding = 0;
+            samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            samplerBinding.descriptorCount = 1;
+            samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            samplerBinding.pImmutableSamplers = nullptr;
+
+            VkDescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = 1;
+            layoutInfo.pBindings = &samplerBinding;
+
+            if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &fullscreenDescriptorSetLayout) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create fullscreen descriptor set layout!");
+            }
+        }
+
+        void createFullscreenDescriptorSet() {
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = fullscreenDescriptorPool; // Ensure this pool exists
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &fullscreenDescriptorSetLayout;
+
+            if (vkAllocateDescriptorSets(device, &allocInfo, &fullscreenDescriptorSet) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to allocate fullscreen descriptor set!");
+            }
+
+            VkDescriptorImageInfo imageInfo{};
+            // imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            imageInfo.imageLayout =  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = rayOutputImageView;  // from ray tracing pass
+            imageInfo.sampler = sampler;
+
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = fullscreenDescriptorSet;
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+        }
+
+        void createFullscreenDescriptorPool() {
+            VkDescriptorPoolSize poolSize{};
+            poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            poolSize.descriptorCount = 1;
+
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            poolInfo.maxSets = 1;
+
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &fullscreenDescriptorPool) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create fullscreen descriptor pool!");
+            }
         }
 
         void createSampler() {
@@ -1814,10 +2019,18 @@ class VulkanContext {
                 vkDestroySampler(device, sampler, nullptr);
                 sampler = VK_NULL_HANDLE;
             }
+            if (fullscreenDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(device, fullscreenDescriptorSetLayout, nullptr);
+                fullscreenDescriptorSetLayout = VK_NULL_HANDLE;
+            }
+            if (fullscreenDescriptorPool != VK_NULL_HANDLE) {
+                vkDestroyDescriptorPool(device, fullscreenDescriptorPool, nullptr);
+                fullscreenDescriptorPool = VK_NULL_HANDLE;
+            }
 
-            if (graphicsPipelineLayout != VK_NULL_HANDLE) {
-                vkDestroyPipelineLayout(device, graphicsPipelineLayout, nullptr);
-                graphicsPipelineLayout = VK_NULL_HANDLE;
+            if (fullscreenPipelineLayout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(device, fullscreenPipelineLayout, nullptr);
+                fullscreenPipelineLayout = VK_NULL_HANDLE;
             }
         }
 
