@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <fstream>
 #include <cstring>
+#include <array>
 
 #include "core/window.hpp"
 
@@ -76,72 +77,48 @@ class VulkanContext {
         VulkanContext(const Window& window) {
             volkInitialize();
             createInstance();
-            std::cout << "Instance Created" << std::endl;
             setupDebugMessenger();
             volkLoadInstance(instance);
             createSurface(window);
-            std::cout << "Surface Created" << std::endl;
             pickPhysicalDevice();
-            std::cout << "Physical Device Created" << std::endl;
             createLogicalDevice();
-            std::cout << "Logical Device Created" << std::endl;
             volkLoadDevice(device);
 
             createSwapChain(window.getWindow());
-            std::cout << "Swap chain Created" << std::endl;
             createImageViews();
-            std::cout << "Image Views Created" << std::endl;
 
             createRenderPass();
-            std::cout << "Render Pass Created" << std::endl;
 
             createSampler();
-            std::cout << "Sampler Created" << std::endl;
             
             // ray tracing related
             createRayDescriptorSetLayout();
-            std::cout << "Ray DSL Created" << std::endl;
             createFullscreenDescriptorSetLayout();
-            std::cout << "FS DSL Created" << std::endl;
             
             pipelines.resize(2);
 
             createRayDescriptorPool();
-            std::cout << "Ray DSP Created" << std::endl;
             createFullscreenDescriptorPool();
-            std::cout << "FS DSP Created" << std::endl;
 
             createRayOutputImage();
-            std::cout << "Ray Output Image Created" << std::endl;
 
             createRayDescriptorSet();
-            std::cout << "Ray DS Created" << std::endl;
             createFullscreenDescriptorSet();
-            std::cout << "FS DS Created" << std::endl;
 
             createCommandPool();
-            std::cout << "Command Pool Created" << std::endl;
 
             createBLAS();
-            std::cout << "BLAS Created" << std::endl;
             createTLAS();
-            std::cout << "TLAS Created" << std::endl;
 
             createRayPipeline();
-            std::cout << "Ray Pipeline Created" << std::endl;
             createFullscreenPipeline();
-            std::cout << "FS Pipeline Created" << std::endl;
-            
+
             createShaderBindingTable();
-            std::cout << "Ray SBT Created" << std::endl;
 
             createFramebuffers();
-            std::cout << "Framebuffers Created" << std::endl;
 
             createCommandBuffers();
-            std::cout << "Command buffers Created" << std::endl;
             createSyncObjects();
-            std::cout << "SO Created" << std::endl;
         }
 
         ~VulkanContext() {
@@ -1122,18 +1099,26 @@ class VulkanContext {
         }
 
         void createRayDescriptorSetLayout() {
-            // Create a descriptor set layout for ray tracing
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = 0;
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; // Storage image for ray tracing output
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR; // Used in ray generation shader
-            binding.pImmutableSamplers = nullptr; // Optional
+            std::vector<VkDescriptorSetLayoutBinding> bindings(2);
+
+            // BINDING 0: Acceleration Structure
+            bindings[0].binding = 0;
+            bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            bindings[0].descriptorCount = 1;
+            bindings[0].stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            bindings[0].pImmutableSamplers = nullptr;
+
+            // BINDING 1: Storage Image
+            bindings[1].binding = 1;
+            bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bindings[1].descriptorCount = 1;
+            bindings[1].stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            bindings[1].pImmutableSamplers = nullptr;
 
             VkDescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
 
             if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &rayDescriptorSetLayout) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create ray descriptor set layout!");
@@ -1141,15 +1126,16 @@ class VulkanContext {
         }
 
         void createRayDescriptorPool() {
-            // Create a descriptor pool for ray tracing
-            VkDescriptorPoolSize poolSize{};
-            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; // Storage image for ray tracing output
-            poolSize.descriptorCount = 1; // Only one storage image
+            std::vector<VkDescriptorPoolSize> poolSizes(2);
+            poolSizes[0].type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            poolSizes[0].descriptorCount = 1;
+            poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            poolSizes[1].descriptorCount = 1;
 
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.poolSizeCount = 1;
-            poolInfo.pPoolSizes = &poolSize;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
             poolInfo.maxSets = 1; // Only one descriptor set
 
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &rayDescriptorPool) != VK_SUCCESS) {
@@ -1158,7 +1144,7 @@ class VulkanContext {
         }
 
         void createRayDescriptorSet() {
-            // Allocate a descriptor set from the ray descriptor pool
+            // Allocate descriptor set
             VkDescriptorSetAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfo.descriptorPool = rayDescriptorPool;
@@ -1169,20 +1155,38 @@ class VulkanContext {
                 throw std::runtime_error("Failed to allocate ray descriptor set!");
             }
 
+            // Acceleration Structure descriptor
+            VkWriteDescriptorSetAccelerationStructureKHR accStructureInfo{};
+            accStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+            accStructureInfo.accelerationStructureCount = 1;
+            accStructureInfo.pAccelerationStructures = &tlas.handle;
+
+            VkWriteDescriptorSet accelWrite{};
+            accelWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            accelWrite.dstSet = rayDescriptorSet;
+            accelWrite.dstBinding = 0;
+            accelWrite.dstArrayElement = 0;
+            accelWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            accelWrite.descriptorCount = 1;
+            accelWrite.pNext = &accStructureInfo;
+
+            // Storage image descriptor
             VkDescriptorImageInfo storageImageInfo{};
             storageImageInfo.imageView = rayOutputImageView;
             storageImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = rayDescriptorSet;
-            descriptorWrite.dstBinding = 0;
-            descriptorWrite.dstArrayElement = 0;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pImageInfo = &storageImageInfo;
+            VkWriteDescriptorSet imageWrite{};
+            imageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            imageWrite.dstSet = rayDescriptorSet;
+            imageWrite.dstBinding = 1;
+            imageWrite.dstArrayElement = 0;
+            imageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            imageWrite.descriptorCount = 1;
+            imageWrite.pImageInfo = &storageImageInfo;
 
-            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+            // Write both at once
+            std::array<VkWriteDescriptorSet, 2> writes = { accelWrite, imageWrite };
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
         }
 
         void createShaderBindingTable() {
@@ -1627,14 +1631,8 @@ class VulkanContext {
             }
         }
 
-
         // main.cpp functions
         void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-            std::cout << "recordCommandBuffer: imageIndex = " << imageIndex << std::endl;
-            std::cout << "  swapChainImages size: " << swapChainImages.size() << std::endl;
-            std::cout << "  swapChainFramebuffers size: " << swapChainFramebuffers.size() << std::endl;
-            std::cout << "  commandBuffers size: " << commandBuffers.size() << std::endl;
-
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = 0; // Optional
@@ -1963,7 +1961,6 @@ class VulkanContext {
             if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
                 throw std::runtime_error("failed to create sampler!");
         }
-
 
         // function to handle window resizing
         void recreateSwapChain(GLFWwindow* window) {

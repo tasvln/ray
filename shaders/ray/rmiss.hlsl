@@ -1,9 +1,11 @@
 struct MyPayload {
-    float3 color;
+    float4 color;
+    float hitDistance;
 };
 
 [shader("miss")]
-void main(inout MyPayload payload)
+
+void main(inout MyPayload payload : SV_RayPayload)
 {
-    payload.color = float3(0.2, 0.2, 0.2); // default color
+    payload.color = float4(0.0, 1.0, 0.0, 1.0); // Red
 }
