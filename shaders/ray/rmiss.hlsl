@@ -5,7 +5,7 @@ struct MyPayload {
 
 [shader("miss")]
 
-void main(inout MyPayload payload : SV_RayPayload)
+void main(inout MyPayload payload)
 {
-    payload.color = float4(0.0, 1.0, 0.0, 1.0); // Red
+    payload.color = float4(0.0, 0.0, 0.0, 1.0); // Green
 }

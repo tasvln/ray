@@ -102,13 +102,13 @@ class VulkanContext {
 
             createRayOutputImage();
 
-            createRayDescriptorSet();
-            createFullscreenDescriptorSet();
-
             createCommandPool();
 
             createBLAS();
             createTLAS();
+
+            createRayDescriptorSet();
+            createFullscreenDescriptorSet();
 
             createRayPipeline();
             createFullscreenPipeline();
@@ -141,17 +141,11 @@ class VulkanContext {
 
         // main.cpp functions
         void drawFrame() {
-            std::cout << "drawFrame: currentFrame = " << currentFrame << std::endl;
-            std::cout << "  inFlightFences.size() = " << inFlightFences.size() << std::endl;
-            std::cout << "  imageAvailableSemaphores.size() = " << imageAvailableSemaphores.size() << std::endl;
-            std::cout << "  renderFinishedSemaphores.size() = " << renderFinishedSemaphores.size() << std::endl;
-            std::cout << "  commandBuffers.size() = " << commandBuffers.size() << std::endl;
-            std::cout << "  imagesInFlight.size() = " << imagesInFlight.size() << std::endl;
 
-            if (currentFrame >= inFlightFences.size()) {
-                std::cout << "  ERROR: currentFrame out of range for inFlightFences!" << std::endl;
-                return;
-            }
+            // if (currentFrame >= inFlightFences.size()) {
+            //     std::cout << "  ERROR: currentFrame out of range for inFlightFences!" << std::endl;
+            //     return;
+            // }
             if (currentFrame >= imageAvailableSemaphores.size()) {
                 std::cout << "  ERROR: currentFrame out of range for imageAvailableSemaphores!" << std::endl;
                 return;
@@ -170,12 +164,6 @@ class VulkanContext {
             uint32_t imageIndex;
             VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX,
                 imageAvailableSemaphores.at(currentFrame), VK_NULL_HANDLE, &imageIndex);
-
-            std::cout << "  vkAcquireNextImageKHR returned: " << result << std::endl;
-            std::cout << "  imageIndex = " << imageIndex << std::endl;
-            std::cout << "  imagesInFlight.size() = " << imagesInFlight.size() << std::endl;
-            std::cout << "  renderFinishedSemaphores.size() = " << renderFinishedSemaphores.size() << std::endl;
-
             if (imageIndex >= imagesInFlight.size()) {
                 std::cout << "  ERROR: imageIndex out of range for imagesInFlight!" << std::endl;
                 return;
@@ -193,9 +181,6 @@ class VulkanContext {
             } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
                 throw std::runtime_error("Failed to acquire swap chain image!");
             }
-
-            std::cout << "imagesInFlight[" << imageIndex << "] = " << imagesInFlight[imageIndex] << std::endl;
-
 
             if (imagesInFlight.at(imageIndex) != VK_NULL_HANDLE) {
                 vkWaitForFences(device, 1, &imagesInFlight.at(imageIndex), VK_TRUE, UINT64_MAX);
@@ -1255,6 +1240,9 @@ class VulkanContext {
             missRegion.stride = handleSizeAligned;
             missRegion.size = handleSizeAligned;
 
+            std::cout << "missRegion.deviceAddress stb: " << missRegion.deviceAddress << std::endl;
+            std::cout << "missRegion.size stb: " << missRegion.size << std::endl;
+
             hitRegion.deviceAddress = sbtAddress + 2 * handleSizeAligned;
             hitRegion.stride = handleSizeAligned;
             hitRegion.size = handleSizeAligned;
@@ -1651,7 +1639,7 @@ class VulkanContext {
             vkCmdTraceRaysKHR(commandBuffer, &raygenRegion, &missRegion, &hitRegion, &callableRegion, swapChainExtent.width, swapChainExtent.height, 1);
             
             transitionImageLayout(commandBuffer, rayOutputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            transitionImageLayout(commandBuffer, swapChainImages[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
 
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1674,8 +1662,6 @@ class VulkanContext {
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
             vkCmdEndRenderPass(commandBuffer);
-
-            transitionImageLayout(commandBuffer, swapChainImages[imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
             if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
                 throw std::runtime_error("failed to record command buffer!");
@@ -1765,6 +1751,12 @@ class VulkanContext {
                 barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
                 srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            }else if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+                srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             }
             else {

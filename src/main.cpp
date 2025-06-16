@@ -8,7 +8,7 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    Window window(1080, 600, "Ray");
+    Window window(1440, 800, "Ray");
     cout << "Initializing Ray..." << endl;
     VulkanContext vk(window);
 
