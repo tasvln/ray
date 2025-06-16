@@ -1,7 +1,4 @@
-struct MyPayload {
-    float4 color;
-    float hitDistance;
-};
+#include "common.hlsli"
 
 RaytracingAccelerationStructure Scene : register(t0);
 RWTexture2D<float4> outputImage : register(u1); // Image output
@@ -18,7 +15,7 @@ void main()
     float3 direction = normalize(target - origin);
 
     RayDesc ray;
-    ray.Origin = float3(0.0, 0.0, -2.0);
+    ray.Origin = origin;
     ray.Direction = direction;
     ray.TMin = 0.001;
     ray.TMax = 1000.0;

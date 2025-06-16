@@ -1,12 +1,8 @@
-struct MyPayload {
-    float4 color;
-    float hitDistance;
-};
+#include "common.hlsli"
 
 [shader("closesthit")]
 void main(inout MyPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    // Set the color if we hit something
-    payload.color = float4(1.0, 0.0, 0.0, 1.0); // Red
-    // payload.color = float4(1.0, 0.0, 0.0, 1.0);
+    payload.hitDistance = RayTCurrent(); // RayTCurrent() gives distance
+    payload.color = float4(payload.hitDistance * 0.1, 0.0, 0.0, 1.0);
 }
