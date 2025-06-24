@@ -66,6 +66,11 @@ class Window {
         int getHeight() const {
             return height;
         }
+
+        double getTime() const
+        {
+            return glfwGetTime();
+        }
         
     private:
         GLFWwindow* window;

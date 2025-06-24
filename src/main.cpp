@@ -18,12 +18,13 @@ int main(int argc, char* argv[]) {
       while (!window.shouldClose()) {
         window.pollEvents();
         // vk.drawFrame(window.getWindow());
-        vk.drawFrame();
+        vk.renderFrame();
       }
     } catch (const std::exception& e) {
       std::cerr << e.what() << std::endl;
       return EXIT_FAILURE;
     }
-
+    
+    vk.waitDeviceIdle();
     return EXIT_SUCCESS;
 }
