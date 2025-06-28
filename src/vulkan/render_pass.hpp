@@ -7,12 +7,22 @@
 #include <array>
 #include <stdexcept>
 
+#include "depth_buffer.hpp"
+
 // TODO: add depth attachments
 
 class VulkanRenderPass {
     public:
-        VulkanRenderPass(const VkDevice& device, const VkFormat& swapChainImageFormat): device(device) {
-            createRenderPass(swapChainImageFormat);
+        VulkanRenderPass(
+            const VkDevice& device, 
+            const VkFormat& swapChainImageFormat,
+            const VulkanDepthBuffer& depthBuffer,
+            const VkAttachmentLoadOp colorBufferLoadOp,
+	        const VkAttachmentLoadOp depthBufferLoadOp
+        ): 
+            device(device)
+        {
+            createRenderPass(swapChainImageFormat, depthBuffer, depthBufferLoadOp);
         }
 
         ~VulkanRenderPass() {
@@ -28,25 +38,33 @@ class VulkanRenderPass {
 
     private:
         VkDevice device = VK_NULL_HANDLE;
-
         VkRenderPass renderPass = VK_NULL_HANDLE;
 
-        void createRenderPass(const VkFormat& swapChainImageFormat) {
+        void createRenderPass(const VkFormat& swapChainImageFormat, const VulkanDepthBuffer& depthBuffer, const VkAttachmentLoadOp colorBufferLoadOp, const VkAttachmentLoadOp depthBufferLoadOp) {
             // Color attachment
             VkAttachmentDescription colorAttachment{};
             colorAttachment.format = swapChainImageFormat;
             colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 
-            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttachment.loadOp = colorBufferLoadOp;
             colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
             colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-            colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            colorAttachment.initialLayout = colorBufferLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
             // Depth attachment
+            VkAttachmentDescription depthAttachment = {};
+            depthAttachment.format = depthBuffer.getFormat();
+            depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+            depthAttachment.loadOp = depthBufferLoadOp;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.initialLayout = depthBufferLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
             // Attachment reference
             VkAttachmentReference colorAttachmentRef{};
@@ -71,9 +89,10 @@ class VulkanRenderPass {
             dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-            std::array<VkAttachmentDescription, 1> attachments =
+            std::array<VkAttachmentDescription, 2> attachments =
             { 
-                colorAttachment
+                colorAttachment,
+                depthAttachment 
             };
 
             // Create Render Pass

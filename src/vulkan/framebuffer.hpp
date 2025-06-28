@@ -7,10 +7,13 @@
 #include <array>
 #include <stdexcept>
 
+#include "depth_buffer.hpp"
+#include "render_pass.hpp"
+
 class VulkanFrameBuffer {
     public:
-        VulkanFrameBuffer(const VkDevice& device, const VkImageView& imageView, const VkRenderPass& renderPass, const VkExtent2D& swapChainExtent): device(device) {
-            createFramebuffers(imageView, swapChainExtent, renderPass);
+        VulkanFrameBuffer(const VkDevice& device, const VkImageView& colorImageView, const VkImageView& depthImageView, const VulkanRenderPass& renderPass, const VkExtent2D& swapChainExtent): device(device) {
+            createFramebuffers(colorImageView, depthImageView, swapChainExtent, renderPass);
         }
 
         ~VulkanFrameBuffer() {
@@ -28,15 +31,16 @@ class VulkanFrameBuffer {
         VkDevice device = VK_NULL_HANDLE;
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
-        void createFramebuffers(const VkImageView& imageView, const VkExtent2D& swapChainExtent, const VkRenderPass& renderPass) {
+        void createFramebuffers(const VkImageView& colorImageView, const VkImageView& depthImageView, const VkExtent2D& swapChainExtent, const VulkanRenderPass& renderPass) {
             VkImageView attachments[] = {
-                imageView
+                colorImageView,
+                depthImageView
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.renderPass = renderPass.getRenderPass();
+            framebufferInfo.attachmentCount = 2;
             framebufferInfo.pAttachments = attachments;
             framebufferInfo.width = swapChainExtent.width;
             framebufferInfo.height = swapChainExtent.height;
