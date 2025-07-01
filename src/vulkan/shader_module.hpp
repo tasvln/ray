@@ -7,14 +7,14 @@
 #include <fstream>
 #include <stdexcept>
 
-class ShaderModule {
+class VulkanShaderModule {
     public: 
-        ShaderModule(const VkDevice& device, const std::string& filename): device(device) {
+        VulkanShaderModule(const VkDevice& device, const std::string& filename): device(device) {
             auto shaderCode = readFile(filename);
             shaderModule = createShaderModule(shaderCode);
         }
 
-        ~ShaderModule() {
+        ~VulkanShaderModule() {
             if (shaderModule != nullptr) {
                 vkDestroyShaderModule(device, shaderModule, nullptr);
                 shaderModule = nullptr;

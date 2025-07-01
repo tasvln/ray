@@ -1304,7 +1304,6 @@ class VulkanContext {
             }
         }
 
-
         void createCommandBuffers() {
             createGraphicsCommandBuffers();
         }

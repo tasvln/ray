@@ -38,6 +38,14 @@ class VulkanImageView {
             return imageView;
         }
 
+        const VkFormat getFormat() const {
+            return format;
+        }
+
+        const VkImage getImage() const {
+            return image;
+        }
+
     private:
         VkDevice device = VK_NULL_HANDLE;
         // std::vector<VkImageView> imageViews;
@@ -81,18 +89,6 @@ class VulkanImageView {
                 throw std::runtime_error("Failed to create image view!");
             }
 
-            return imageView;
-        }
-
-        const VkFormat getFormat() const {
-            return format;
-        }
-
-        const VkImage getImage() const {
-            return image;
-        }
-
-        const VkImageView getImageView() const {
             return imageView;
         }
 };

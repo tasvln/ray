@@ -11,11 +11,6 @@
 #include <array>
 #include <memory>
 
-struct BufferResource {
-	std::unique_ptr<VulkanBuffer> buffer;
-	std::unique_ptr<VulkanDeviceMemory> memory;
-};
-
 // Axis-Aligned Bounding Box -> used for spatial partitioning, collision detection, and ray intersection culling.
 
 // Procedural Geometry -> vertices and indices with mathematical formulas or code
@@ -32,8 +27,8 @@ class VulkanSceneResources {
 	        textures(std::move(textures))
         {
             aggregateModelData();
-            createBuffers(commandPool);
-            uploadTextures(commandPool);
+            createBuffers(device, commandPool);
+            uploadTextures(device, commandPool);
         }
 
         ~VulkanSceneResources() = default;
@@ -46,17 +41,17 @@ class VulkanSceneResources {
 
                 offsets.emplace_back(indexOffset, vertexOffset);
 
-                vertices.insert(vertices.end(), model->getVertices().begin(), model->getVertices().end());
-                indices.insert(indices.end(), model->getIndices().begin(), model->getIndices().end());
-                materials.insert(materials.end(), model->getMaterials().begin(), model->getMaterials().end());
+                vertices.insert(vertices.end(), model.getVertices().begin(), model.getVertices().end());
+                indices.insert(indices.end(), model.getIndices().begin(), model.getIndices().end());
+                materials.insert(materials.end(), model.getMaterials().begin(), model.getMaterials().end());
 
                 // Adjust material indices
                 for (size_t i = vertexOffset; i < vertices.size(); ++i) {
-                    vertices[i].MaterialIndex += materialOffset;
+                    vertices[i].materialIndex += materialOffset;
                 }
 
                 // Optional procedural geometry
-                if (auto* sphere = dynamic_cast<const VulkanSphere*>(model->getProcedural())) {
+                if (auto* sphere = dynamic_cast<const VulkanSphere*>(model.getProcedural())) {
                     auto aabb = sphere->getBoundingBox();
                     aabbs.push_back({
                         // first of the pair returned
@@ -78,18 +73,18 @@ class VulkanSceneResources {
 
         void uploadTextures(const VulkanDevice& device, VulkanCommandPool& commandPool) {
             textureImages.reserve(textures.size());
-            textureImageViewHandles.reserve(textures.size());
-            textureSamplerHandles.reserve(textures.size());
+            textureImageView.reserve(textures.size());
+            textureSampler.reserve(textures.size());
 
             for (const auto& texture : textures) {
-                auto textureImage = std::make_unique<VulkanTextureImage>(device.getDevice(), device.getPhysicalDevice(), device.getGraphicsQueue(), commandPool, *texture);
-                textureImageViewHandles.push_back(textureImage->getImageView().Handle());
-                textureSamplerHandles.push_back(textureImage->getSampler().Handle());
+                auto textureImage = std::make_unique<VulkanTextureImage>(device.getDevice(), device.getPhysicalDevice(), device.getGraphicsQueue(), commandPool, texture);
+                textureImageView.push_back(textureImage->getImageView().getImageView());
+                textureSampler.push_back(textureImage->getSampler().getSampler());
                 textureImages.push_back(std::move(textureImage));
             }
         }
 
-        void createBuffers(const VulkanDevice& device, VulkanCommandPool& commandPool, VkQueue graphicsQueue) {
+        void createBuffers(const VulkanDevice& device, VulkanCommandPool& commandPool) {
             constexpr auto flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
             vertexBuffer = utils::createDeviceBuffer(
@@ -136,48 +131,41 @@ class VulkanSceneResources {
         }
 
         const std::vector<VkImageView>& getTextureImageViews() const { 
-            return textureImageViewHandles; 
+            return textureImageView; 
         }
         
 	    const std::vector<VkSampler>& getTextureSamplers() const { 
-            return textureSamplerHandles; 
+            return textureSampler; 
         }
 
-        const VulkanBuffer& getVertexBuffer() {
-            return vertexBuffer.buffer;
+        const VulkanBuffer& getVertexBuffer() const {
+            return *vertexBuffer.buffer;
         }
 
-        const VulkanBuffer& getIndexBuffer() {
-            return indexBuffer.buffer;
+        const VulkanBuffer& getIndexBuffer() const {
+            return *indexBuffer.buffer;
         }
 
-        const VulkanBuffer& getMaterialBuffer() {
-            return materialBuffer.buffer;
+        const VulkanBuffer& getMaterialBuffer() const {
+            return *materialBuffer.buffer;
         }
 
-        const VulkanBuffer& getOffsetBuffer() {
-            return offsetBuffer.buffer;
+        const VulkanBuffer& getOffsetBuffer() const {
+            return *offsetBuffer.buffer;
         }   
 
-        const VulkanBuffer& getAaBbBuffer() {
-            return aabbBuffer.buffer;
+        const VulkanBuffer& getAaBbBuffer() const {
+            return *aabbBuffer.buffer;
         }
 
-        const VulkanBuffer& getProceduralBuffer() {
-            return proceduralBuffer.buffer;
+        const VulkanBuffer& getProceduralBuffer() const {
+            return *proceduralBuffer.buffer;
         }
 
         void clearResources() {
-            textureSamplerHandles.clear();
-            textureImageViewHandles.clear();
+            textureSampler.clear();
+            textureImageView.clear();
             textureImages.clear();
-
-            vertexBuffer = {};
-            indexBuffer = {};
-            materialBuffer = {};
-            offsetBuffer = {};
-            aabbBuffer = {};
-            proceduralBuffer = {};
 
             models.clear();
             textures.clear();
@@ -195,21 +183,21 @@ class VulkanSceneResources {
         std::vector<VulkanTexture> textures;
 
         // Aggregated GPU data
-        std::vector<Vertex> vertices;
+        std::vector<VulkanVertex> vertices;
         std::vector<uint32_t> indices;
-        std::vector<Material> materials;
+        std::vector<VulkanMaterial> materials;
         std::vector<glm::vec4> procedurals;
         std::vector<VkAabbPositionsKHR> aabbs;
         std::vector<glm::uvec2> offsets;
 
 		std::vector<std::unique_ptr<VulkanTextureImage>> textureImages;
-		std::vector<VkImageView> textureImageViewHandles;
-		std::vector<VkSampler> textureSamplerHandles;
+		std::vector<VkImageView> textureImageView;
+		std::vector<VkSampler> textureSampler;
 
-        BufferResource vertexBuffer;
-        BufferResource indexBuffer;
-        BufferResource materialBuffer;
-        BufferResource offsetBuffer;
-        BufferResource aabbBuffer;
-        BufferResource proceduralBuffer;
+        utils::BufferResource<VulkanVertex> vertexBuffer;
+        utils::BufferResource<uint32_t> indexBuffer;
+        utils::BufferResource<VulkanMaterial> materialBuffer;
+        utils::BufferResource<glm::uvec2> offsetBuffer;
+        utils::BufferResource<VkAabbPositionsKHR> aabbBuffer;
+        utils::BufferResource<glm::vec4> proceduralBuffer;
 };

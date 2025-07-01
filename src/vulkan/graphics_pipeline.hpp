@@ -5,6 +5,8 @@
 #include "descriptor_sets.hpp"
 #include "descriptor_pool.hpp"
 #include "descriptorset_layout.hpp"
+#include "render_pass.hpp"
+#include "shader_module.hpp"
 #include "helpers/vertex.hpp"
 #include "helpers/uniform_buffer.hpp"
 #include "helpers/scene_resources.hpp"
@@ -26,29 +28,89 @@ enum DescriptorBindingIndices : uint32_t {
 class VulkanGraphicsPipeline{
     public:
         VulkanGraphicsPipeline(
-            const VkDevice& device, 
+            const VulkanDevice& device, 
             const VulkanSwapChain& swapchain, 
             const VulkanDepthBuffer& depthBuffer,
-            const bool isWireFrame = false,
-            const std::vector<VulkanUniformBuffer>& uniformBuffers
-        ): device(device), isWireFrame(isWireFrame) {
-
+            const std::vector<VulkanUniformBuffer>& uniformBuffers,
+            const VulkanSceneResources& sceneResources,
+            bool isWireFrame = false
+        ) : device(device), isWireFrame(isWireFrame) {
+            createGraphicsPipeline(swapchain, uniformBuffers, sceneResources, depthBuffer);
         }
 
         ~VulkanGraphicsPipeline() {
-
+            if (pipeline) {
+                vkDestroyPipeline(device.getDevice(), pipeline, nullptr);
+            }
         }
+
+        const VkPipeline getPipeline() const {
+            return pipeline;
+        }
+
+        // Descriptor Pool
+        const VulkanDescriptorPool& getDescriptorPool() const {
+            return *graphicsPool;
+        }
+        // VulkanDescriptorPool& getDescriptorPool() {
+        //     return *graphicsPool;
+        // }
+
+        // Descriptor Set Layout
+        const VulkanDescriptorSetLayout& getDescriptorSetLayout() const {
+            return *graphicsSetLayout;
+        }
+        // VulkanDescriptorSetLayout& getDescriptorSetLayout() {
+        //     return *graphicsSetLayout;
+        // }
+
+        // Descriptor Sets
+        const VulkanDescriptorSets& getDescriptorSets() const {
+            return *graphicsSets;
+        }
+        // VulkanDescriptorSets& getDescriptorSets() {
+        //     return *graphicsSets;
+        // }
+
+        // Pipeline Layout
+        const VulkanPipelineLayout& getPipelineLayout() const {
+            return *graphicsPipelineLayout;
+        }
+        // VulkanPipelineLayout& getPipelineLayout() {
+        //     return *graphicsPipelineLayout;
+        // }
+
+        // Render Pass
+        const VulkanRenderPass& getRenderPass() const {
+            return *graphicsRenderPass;
+        }
+        // VulkanRenderPass& getRenderPass() {
+        //     return *graphicsRenderPass;
+        // }
+
+        bool getWireFrameState() const {
+            return isWireFrame;
+        }
+
         
     private:
-        VkDevice device = VK_NULL_HANDLE;
+        const VulkanDevice& device;
         VkPipeline pipeline = VK_NULL_HANDLE;
 
-        const bool isWireFrame;
+        std::unique_ptr<VulkanDescriptorPool> graphicsPool;
+        std::unique_ptr<VulkanDescriptorSetLayout> graphicsSetLayout;
+        std::unique_ptr<VulkanDescriptorSets> graphicsSets;
+
+        std::unique_ptr<VulkanPipelineLayout> graphicsPipelineLayout;
+        std::unique_ptr<VulkanRenderPass> graphicsRenderPass;
+
+        bool isWireFrame;
 
         void createGraphicsPipeline(
             const VulkanSwapChain& swapchain, 
             const std::vector<VulkanUniformBuffer>& uniformBuffers,
-            const VulkanSceneResources& sceneResources
+            const VulkanSceneResources& sceneResources,
+            const VulkanDepthBuffer& depthBuffer
         ) {
             VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
             vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -134,9 +196,12 @@ class VulkanGraphicsPipeline{
                 }
             }
 
-            VulkanDescriptorPool graphicsPool(device, descriptorBindings, uniformBuffers.size());
-            VulkanDescriptorSetLayout graphicsSetLayout(device, descriptorBindings);
-            VulkanDescriptorSets graphicsSets(device, graphicsPool, graphicsSetLayout, bindingTypes, uniformBuffers.size());
+            graphicsPool = std::make_unique<VulkanDescriptorPool>(device.getDevice(), descriptorBindings, uniformBuffers.size());
+            graphicsSetLayout = std::make_unique<VulkanDescriptorSetLayout>(device.getDevice(), descriptorBindings);
+            graphicsSets = std::make_unique<VulkanDescriptorSets>(device.getDevice(), *graphicsPool, *graphicsSetLayout, bindingTypes, uniformBuffers.size());
+
+            auto& textureImageViews = sceneResources.getTextureImageViews();
+            auto& textureSamplers = sceneResources.getTextureSamplers();
 
             for (uint32_t i = 0; i != swapchain.getSwapChainImages().size(); i++) {
                 // Uniform Buffer
@@ -150,14 +215,54 @@ class VulkanGraphicsPipeline{
                 uniformBufferInfo.range = VK_WHOLE_SIZE;
 
                 // Texture Buffer
-                std::vector<VkDescriptorImageInfo> images(sceneResources.getTextureSamplers().size());
+                std::vector<VkDescriptorImageInfo> imageInfos(textureSamplers.size());
 
                 for(size_t j = 0; j != imageInfos.size(); j++) {
-                    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    imageInfo.imageView = sceneResources.getTextureImageViews()[images];
+                    imageInfos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    imageInfos[j].imageView = textureImageViews[j];
+                    imageInfos[j].sampler = textureSamplers[j];
                 }
 
+                const std::vector<VkWriteDescriptorSet> descriptorWrites = {
+                    graphicsSets->bind(i, 0, uniformBufferInfo),
+                    graphicsSets->bind(i, 1, materialBufferInfo),
+                    graphicsSets->bind(i, 2, *imageInfos.data(), static_cast<uint32_t>(imageInfos.size())),    
+                };
 
+                graphicsSets->updateDescriptors(descriptorWrites);
             }
+
+            graphicsPipelineLayout = std::make_unique<VulkanPipelineLayout>(device.getDevice(), *graphicsSetLayout);
+            graphicsRenderPass = std::make_unique<VulkanRenderPass>(device.getDevice(), swapchain.getSwapChainFormat(), depthBuffer, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_CLEAR);
+
+            const VulkanShaderModule vShader(device.getDevice(), "shaders/graphics/vert.spv");
+            const VulkanShaderModule fShader(device.getDevice(), "shaders/graphics/frag.spv");
+            
+            VkPipelineShaderStageCreateInfo vShaderStage = vShader.createShaderStage(VK_SHADER_STAGE_VERTEX_BIT);
+            VkPipelineShaderStageCreateInfo fShaderStage = vShader.createShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT);
+            
+            VkPipelineShaderStageCreateInfo shaderStages[] = {
+                vShaderStage,
+                fShaderStage
+            };
+
+            VkGraphicsPipelineCreateInfo pipelineInfo{};
+            pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            pipelineInfo.stageCount = 2;
+            pipelineInfo.pStages = shaderStages;
+            pipelineInfo.pVertexInputState = &vertexInputInfo;
+            pipelineInfo.pInputAssemblyState = &inputAssembly;
+            pipelineInfo.pViewportState = &viewportState;
+            pipelineInfo.pRasterizationState = &rasterizer;
+            pipelineInfo.pMultisampleState = &multisampling;
+            pipelineInfo.pColorBlendState = &colorBlending;
+            pipelineInfo.layout = graphicsPipelineLayout->getPipelineLayout();
+            pipelineInfo.renderPass = graphicsRenderPass->getRenderPass();
+            pipelineInfo.subpass = 0;
+            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+            pipelineInfo.basePipelineIndex = -1;
+
+            if (vkCreateGraphicsPipelines(device.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS)
+                throw std::runtime_error("Failed to create graphics pipeline!");
         }
 };

@@ -37,7 +37,7 @@ class VulkanTextureImage{
 
             image = std::make_unique<VulkanImage>(device, physicalDevice, extent, VK_FORMAT_R8G8B8A8_UNORM);
             imageMemory = std::make_unique<VulkanDeviceMemory>(image->allocateMemory());
-            imageView = std::make_unique<VulkanImageView>(device, image->getImage(), image->getFormat(), VK_IMAGE_ASPECT_COLOR_BIT)
+            imageView = std::make_unique<VulkanImageView>(device, image->getImage(), image->getFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
             sampler = std::make_unique<VulkanSampler>(device, VulkanSamplerConfig());
 
             image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, graphicsQueue);

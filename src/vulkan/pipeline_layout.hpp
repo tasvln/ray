@@ -21,12 +21,44 @@ class VulkanPipelineLayout{
                 throw std::runtime_error("Failed to create pipeline layout!");
         }
 
+        VulkanPipelineLayout(const VulkanPipelineLayout&) = delete;
+        VulkanPipelineLayout& operator=(const VulkanPipelineLayout&) = delete;
+
+        // Enable move constructor
+        VulkanPipelineLayout(VulkanPipelineLayout&& other) noexcept
+            : device(other.device), layout(other.layout) {
+            other.layout = VK_NULL_HANDLE;
+            other.device = VK_NULL_HANDLE;
+        }
+
+        // Enable move assignment
+        VulkanPipelineLayout& operator=(VulkanPipelineLayout&& other) noexcept {
+            if (this != &other) {
+                // Destroy current
+                if (layout != VK_NULL_HANDLE) {
+                    vkDestroyPipelineLayout(device, layout, nullptr);
+                }
+
+                // Move
+                device = other.device;
+                layout = other.layout;
+
+                other.layout = VK_NULL_HANDLE;
+                other.device = VK_NULL_HANDLE;
+            }
+            return *this;
+        }
+
         ~VulkanPipelineLayout() {
             if (layout != nullptr)
             {
                 vkDestroyPipelineLayout(device, layout, nullptr);
                 layout = nullptr;
             }
+        }
+
+        VkPipelineLayout getPipelineLayout() const {
+            return layout;
         }
 
     private:

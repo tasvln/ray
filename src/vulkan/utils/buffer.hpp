@@ -1,6 +1,6 @@
 #pragma once
 
-#include "buffer.hpp"
+#include "vulkan/buffer.hpp"
 #include "device.hpp"
 #include "command_pool.hpp"
 #include "device_memory.hpp"
@@ -15,7 +15,7 @@ namespace utils {
     void copyFromStagingBuffer(
         const VkDevice& device,
         VulkanCommandPool& pool, 
-        VulkanBuffer& buffer, 
+        const VulkanBuffer& buffer, 
         const std::vector<T>& content,
         VkQueue graphicsQueue
     ) {
@@ -28,13 +28,32 @@ namespace utils {
         std::memcpy(data, content.data(), contentSize);
         stagingBufferMemory.unMap();
 
-        buffer.copyFrom(pool, *buffer, contentSize, graphicsQueue);
-    });
+        buffer.copyFrom(pool, *stagingBuffer, contentSize, graphicsQueue);
+    };
 
     template <typename T>
     struct BufferResource {
         std::unique_ptr<VulkanBuffer> buffer;
-        std::unique_ptr<DeviceMemory> memory;
+        std::unique_ptr<VulkanDeviceMemory> memory;
+
+        // Allow move construction
+        BufferResource(BufferResource&& other) noexcept
+            : buffer(std::move(other.buffer)), memory(std::move(other.memory)) {}
+
+        // Allow move assignment
+        BufferResource& operator=(BufferResource&& other) noexcept {
+            if (this != &other) {
+                buffer = std::move(other.buffer);
+                memory = std::move(other.memory);
+            }
+            return *this;
+        }
+
+        // Delete copy operations (optional but clear)
+        BufferResource(const BufferResource&) = delete;
+        BufferResource& operator=(const BufferResource&) = delete;
+
+        BufferResource() = default;
     };
 
     template <typename T>
@@ -42,7 +61,7 @@ namespace utils {
         const VulkanDevice& device,
         VulkanCommandPool& pool,
         VkBufferUsageFlags usage,
-        const std::vector<T>& content,
+        const std::vector<T>& content
     ) {
         const auto contentSize = sizeof(content[0]) * content.size();
 
@@ -56,5 +75,7 @@ namespace utils {
         resource.memory = std::make_unique<VulkanDeviceMemory>(resource.buffer->allocateMemory(device.physicalDevice, allocateFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
         copyFromStagingBuffer(device.device, pool, *resource.buffer, content, device.graphicsQueue);
+
+        return resource;
     }
 }

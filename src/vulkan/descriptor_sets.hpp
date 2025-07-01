@@ -26,53 +26,57 @@ class VulkanDescriptorSets{
         }
 
         // Bind Buffers
-        VkWriteDescriptorSet bind(const size_t index, const uint32_t binding, const VkDescriptorBufferInfo& bufferInfo, const uint32_t count) const {
+        VkWriteDescriptorSet bind(size_t index, uint32_t binding, const VkDescriptorBufferInfo& bufferInfo, uint32_t count = 1) const {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = sets[index];
             descriptorWrite.dstBinding = 0;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = getBindingType(binding);
-            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.descriptorCount = count;
             descriptorWrite.pBufferInfo = &bufferInfo;
 
             return descriptorWrite;
         }
 
         // Bind Image Storage
-        VkWriteDescriptorSet bind(const size_t index, const uint32_t binding, const VkDescriptorImageInfo& imageInfo, const uint32_t count) const {
+        VkWriteDescriptorSet bind(size_t index, uint32_t binding, const VkDescriptorImageInfo& imageInfo, uint32_t count = 1) const {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = sets[index];
-            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstBinding = binding;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = getBindingType(binding);
-            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.descriptorCount = count;
             descriptorWrite.pImageInfo = &imageInfo;
 
             return descriptorWrite;
         }
 
         // Bind Accelerator Struture
-        VkWriteDescriptorSet bind(const size_t index, const uint32_t binding, const VkDescriptorImageInfo& imageInfo, const uint32_t count) const {
+        VkWriteDescriptorSet bind(size_t index, uint32_t binding, const VkWriteDescriptorSetAccelerationStructureKHR& structureInfo, uint32_t count = 1) const {
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = sets[index];
-            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstBinding = binding;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = getBindingType(binding);
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pImageInfo = &imageInfo;
+            descriptorWrite.descriptorCount = count;
+            descriptorWrite.pNext = &structureInfo;
 
             return descriptorWrite;
         }
 
-        VkWriteDescriptorSet updateDescriptors(const std::vector<VkWriteDescriptorSet>& descriptorWrites) {
+        void updateDescriptors(const std::vector<VkWriteDescriptorSet>& descriptorWrites) {
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
 
         const std::vector<VkDescriptorSet>& getSets() const {
             return sets;
+        }
+
+        VkDescriptorSet getSet(size_t index) const {
+            return sets[index];
         }
 
     private:
@@ -81,7 +85,7 @@ class VulkanDescriptorSets{
         
         std::vector<VkDescriptorSet> sets;
 
-        VkDescriptorType getBindingType(const uint32_t binding) const {
+        VkDescriptorType getBindingType(uint32_t binding) const {
             const auto it = bindingTypes.find(binding);
 
             if (it == bindingTypes.end())

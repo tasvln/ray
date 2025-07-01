@@ -271,7 +271,7 @@ class VulkanModel{
             return model.indices;
         }
 
-        const std::vector<VulkanMaterial>& getMaterial() const {
+        const std::vector<VulkanMaterial>& getMaterials() const {
             return model.materials;
         }
 

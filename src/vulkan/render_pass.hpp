@@ -22,7 +22,7 @@ class VulkanRenderPass {
         ): 
             device(device)
         {
-            createRenderPass(swapChainImageFormat, depthBuffer, depthBufferLoadOp);
+            createRenderPass(swapChainImageFormat, depthBuffer, colorBufferLoadOp, depthBufferLoadOp);
         }
 
         ~VulkanRenderPass() {
