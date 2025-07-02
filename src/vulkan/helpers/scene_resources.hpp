@@ -162,6 +162,10 @@ class VulkanSceneResources {
             return *proceduralBuffer.buffer;
         }
 
+        bool isProcedurals() const { 
+            return static_cast<bool>(proceduralBuffer.buffer); 
+        }
+
         void clearResources() {
             textureSampler.clear();
             textureImageView.clear();

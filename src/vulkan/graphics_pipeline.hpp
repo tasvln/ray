@@ -92,6 +92,11 @@ class VulkanGraphicsPipeline{
             return isWireFrame;
         }
 
+        VkDescriptorSet getDescriptorSet(const size_t index) const
+        {
+            return graphicsSets->getSet(index);
+        }
+
         
     private:
         const VulkanDevice& device;
