@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
-#include "vulkan/device.hpp"
+#include "vulkan/raster/device.hpp"
 
 class VulkanRayDispatchTable {
     public: 

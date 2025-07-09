@@ -26,7 +26,7 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
-class dvkInstance { 
+class VulkanInstance { 
     public:
         #ifdef NDEBUG
             const bool enableValidationLayers = false;
@@ -34,31 +34,33 @@ class dvkInstance {
             const bool enableValidationLayers = true;
         #endif
 
-        const std::vector<const char*> validationLayers = {
-            "VK_LAYER_KHRONOS_validation"
-        };
-
-        dvkInstance() {
-            createInstance();
+        VulkanInstance(const std::vector<const char*>& validationLayers): validationLayers(validationLayers) {
+            createInstance(validationLayers);
             setupDebugMessenger();
         }
 
-        ~dvkInstance() {
+        ~VulkanInstance() {
             if (instance != nullptr) {
                 vkDestroyInstance(instance, nullptr);
 		        instance = nullptr;
             }
         }
 
-        const VkInstance& getInstance() {
+        const VkInstance& getInstance() const {
             return instance;
+        }
+
+        const std::vector<const char*>& getValidationLayers() const { 
+            return validationLayers; 
         }
 
     private:
         VkInstance instance = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
-        void createInstance() { 
+        const std::vector<const char*> validationLayers;
+
+        void createInstance(const std::vector<const char*>& validationLayers) { 
             if (enableValidationLayers && !checkValidationLayerSupport()) {
                 throw std::runtime_error("Validation layers requested, but not available!");
             }
@@ -76,10 +78,16 @@ class dvkInstance {
             createInfo.pApplicationInfo = &appInfo;
 
             auto extensions = getRequiredExtensions();
+
+            if (!validationLayers.empty()) {
+                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            }
+
             createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
             createInfo.ppEnabledExtensionNames = extensions.data();
 
             VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+            
             if (enableValidationLayers) {
                 createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
                 createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -97,7 +105,7 @@ class dvkInstance {
         }
 
         bool checkValidationLayerSupport() {
-            uint32_t layerCount;
+            uint32_t layerCount = 0;
             vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
             std::vector<VkLayerProperties> availableLayers(layerCount);
@@ -159,10 +167,6 @@ class dvkInstance {
             const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
             std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-            // if (enableValidationLayers) {
-            //     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            // }
 
             return extensions;
         }

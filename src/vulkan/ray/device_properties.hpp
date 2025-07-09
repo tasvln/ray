@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
-#include "vulkan/device.hpp"
+#include "vulkan/raster/device.hpp"
 
 class VulkanRayDeviceProperties {
     public:
@@ -22,6 +22,14 @@ class VulkanRayDeviceProperties {
         }
 
         ~VulkanRayDeviceProperties() = default;
+
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR getAccelerationProperties() const {
+            return accelerationProps;
+        }
+
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR getPipelineProperties() const {
+            return pipelineProps;
+        }
 
         // acceleration props
 

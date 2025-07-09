@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vulkan/device.hpp"
-#include "vulkan/buffer.hpp"
+#include "vulkan/raster/device.hpp"
+#include "vulkan/raster/buffer.hpp"
 #include "dispatch_table.hpp"
 #include "device_properties.hpp"
 #include "utils/acceleration_structure.hpp"

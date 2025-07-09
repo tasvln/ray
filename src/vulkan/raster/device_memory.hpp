@@ -1,10 +1,11 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "device.hpp"
 
 class VulkanDeviceMemory {
     public:
-        VulkanDeviceMemory(const VkDevice& device, const VkPhysicalDevice& physicalDevice, const uint32_t memoryTypeBits, const VkMemoryAllocateFlags allocateFLags, const VkMemoryPropertyFlags propertyFlags, const size_t size) : device(device) {
+        VulkanDeviceMemory(const VulkanDevice& device, const uint32_t memoryTypeBits, const VkMemoryAllocateFlags allocateFLags, const VkMemoryPropertyFlags propertyFlags, const size_t size) : device(device) {
             VkMemoryAllocateFlagsInfo allocFlagsInfo{};
             allocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
             allocFlagsInfo.flags = allocateFLags;
@@ -13,10 +14,10 @@ class VulkanDeviceMemory {
             VkMemoryAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             allocInfo.allocationSize = size;
-            allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memoryTypeBits, propertyFlags);
+            allocInfo.memoryTypeIndex = findMemoryType(device.getPhysicalDevice(), memoryTypeBits, propertyFlags);
             allocInfo.pNext = &allocFlagsInfo;
 
-            if (vkAllocateMemory(device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+            if (vkAllocateMemory(device.getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to allocate buffer memory!");
             }
         }
@@ -27,19 +28,19 @@ class VulkanDeviceMemory {
 
         ~VulkanDeviceMemory() {
             if (memory != nullptr) {
-                vkFreeMemory(device, memory, nullptr);
+                vkFreeMemory(device.getDevice(), memory, nullptr);
                 memory = nullptr;
             }
         }
 
         void* map(const size_t offset, const size_t size) {
             void* mappedData;
-            vkMapMemory(device, memory, offset, size, 0, &mappedData);
+            vkMapMemory(device.getDevice(), memory, offset, size, 0, &mappedData);
             return mappedData;
         }
 
         void unMap() {
-            vkUnmapMemory(device, memory);
+            vkUnmapMemory(device.getDevice(), memory);
         }
 
         const VkDeviceMemory getMemory() const {
@@ -47,7 +48,7 @@ class VulkanDeviceMemory {
         }
 
     private:
-        VkDevice device = VK_NULL_HANDLE;
+        VulkanDevice device;
         VkDeviceMemory memory = VK_NULL_HANDLE;
 
         uint32_t findMemoryType(const VkPhysicalDevice& physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {

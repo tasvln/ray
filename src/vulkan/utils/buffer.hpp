@@ -1,9 +1,9 @@
 #pragma once
 
-#include "vulkan/buffer.hpp"
-#include "device.hpp"
-#include "command_pool.hpp"
-#include "device_memory.hpp"
+#include "vulkan/raster/buffer.hpp"
+#include "vulkan/raster/device.hpp"
+#include "vulkan/raster/command_pool.hpp"
+#include "vulkan/raster/device_memory.hpp"
 
 #include <array>
 #include <memory>

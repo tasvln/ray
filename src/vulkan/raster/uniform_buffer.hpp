@@ -55,7 +55,7 @@ class VulkanUniformBuffer {
             return *memory;
         }
 
-        void setValues(const UniformData& ubo) {
+        void setValue(const UniformData& ubo) {
             const auto data = memory->map(0, sizeof(UniformData));
             std::memcpy(data, &ubo, sizeof(ubo));
             memory->unMap();

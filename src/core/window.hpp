@@ -7,10 +7,16 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <functional>
+
+#include "core/utils/window.hpp"
+#include "vulkan/engine/engine_config.hpp"
 
 class Window {
     public:
-        Window(int width, int height, const std::string& title) : width(width), height(height), framebufferResized(false) {
+        Window(const EngineConfig config): config(config) {
+            glfwSetErrorCallback(utils::glfwErrorCallback);
+
             if (!glfwInit()) {
                 throw std::runtime_error("Failed to initialize GLFW");
             }
@@ -18,53 +24,104 @@ class Window {
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-            // glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // set to GLFW_FALSE if you don't want the window to be resizable
+            // if (!glfwVulkanSupported()) {
+            //     throw std::runtime_error("Vulkan not support with this version of GLFW");
+            // }
 
-            window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+            glfwWindowHint(GLFW_RESIZABLE, config.isResizable ? GLFW_TRUE : GLFW_FALSE);
+
+            auto* const primaryMonitor = config.isFullscreen ? glfwGetPrimaryMonitor() : nullptr;
+
+            window = glfwCreateWindow(config.width, config.height, config.appName.c_str(), primaryMonitor, nullptr);
+
             if (!window) {
-                glfwTerminate();
                 throw std::runtime_error("Failed to create GLFW window");
             }
             
             glfwSetWindowUserPointer(window, this);
-            glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+            glfwSetKeyCallback(window, utils::glfwKeyCallback);
+            glfwSetCursorPosCallback(window, utils::glfwCursorPositionCallback);
+            glfwSetMouseButtonCallback(window, utils::glfwMouseButtonCallback);
+            glfwSetScrollCallback(window, utils::GlfwScrollCallback);
         };
 
         ~Window(){
             if (window) {
                 glfwDestroyWindow(window);
             }
+            
             glfwTerminate();
+            glfwSetErrorCallback(nullptr);
         };
+
+        void run() {
+            // why did he do this?
+            glfwSetTime(0.0);
+
+            while(!glfwWindowShouldClose(window)) {
+                pollEvents();
+
+                if (drawFrame) {
+                    drawFrame();
+                }
+            }
+        }
+
+        std::function<void()> drawFrame;
+		std::function<void(int key, int scancode, int action, int mods)> onKey;
+		std::function<void(double xpos, double ypos)> onCursorPosition;
+		std::function<void(int button, int action, int mods)> onMouseButton;
+		std::function<void(double xoffset, double yoffset)> onScroll;
 
         GLFWwindow* getWindow() const {
             return window;
+        }
+
+        VkExtent2D getFramebufferSize() const
+        {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            return VkExtent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+        }
+
+        VkExtent2D getWindowSize() const
+        {
+            int width, height;
+            glfwGetWindowSize(window, &width, &height);
+
+            return VkExtent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+        }
+
+        const char* getKeyName(const int key, const int scancode) const
+        {
+            return glfwGetKeyName(key, scancode);
         }
 
         void pollEvents() const {
             glfwPollEvents();
         }
 
-        bool isFramebufferResized() const {
-            return framebufferResized;
+        void wait() const {
+            glfwWaitEvents();
         }
 
-        void resetFramebufferResized() {
-            framebufferResized = false;
-        }
-
-        bool shouldClose() const {
+        bool close() const {
             return glfwWindowShouldClose(window);
+        }
+        
+        bool isMinimized() const {
+            const auto size = getFramebufferSize();
+            return size.height == 0 && size.width == 0;
         }
 
         int getWidth() const {
-            return width;
+            return config.width;
         }
 
         int getHeight() const {
-            return height;
+            return config.height;
         }
 
         double getTime() const
@@ -73,17 +130,8 @@ class Window {
         }
         
     private:
+        const EngineConfig config;
         GLFWwindow* window;
-        int width;
-        int height;
-        bool framebufferResized;
-
-        static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-            Window* win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-            win->framebufferResized = true;
-            win->width = width;
-            win->height = height;
-        }
 };
 
 #endif

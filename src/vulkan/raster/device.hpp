@@ -33,7 +33,7 @@ class VulkanDevice{
             }
         }
 
-        void waitIdle() const {
+        void wait() const {
             std::cout << "-- Start: vkDeviceWaitIdle -- " << std::endl;
             vkDeviceWaitIdle(device);
             std::cout << "-- End: vkDeviceWaitIdle -- " << std::endl;

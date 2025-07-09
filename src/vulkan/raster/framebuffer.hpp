@@ -12,7 +12,14 @@
 
 class VulkanFrameBuffer {
     public:
-        VulkanFrameBuffer(const VkDevice& device, const VkImageView& colorImageView, const VkImageView& depthImageView, const VulkanRenderPass& renderPass, const VkExtent2D& swapChainExtent): device(device) {
+        VulkanFrameBuffer(
+            const VkDevice& device, 
+            const VkImageView& colorImageView, 
+            const VkImageView& depthImageView, 
+            const VulkanRenderPass& renderPass, 
+            const VkExtent2D& swapChainExtent
+        ): device(device) 
+        {
             createFramebuffers(colorImageView, depthImageView, swapChainExtent, renderPass);
         }
 

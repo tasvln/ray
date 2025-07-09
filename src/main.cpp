@@ -8,23 +8,23 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    Window window(1440, 800, "Ray");
-    cout << "Initializing Ray..." << endl;
-    VulkanContext vk(window);
+    // Window window(1440, 800, "Ray");
+    // cout << "Initializing Ray..." << endl;
+    // VulkanContext vk(window);
 
-    cout << "Ray initialized successfully." << endl;
+    // cout << "Ray initialized successfully." << endl;
 
-    try{
-      while (!window.shouldClose()) {
-        window.pollEvents();
-        // vk.drawFrame(window.getWindow());
-        vk.renderFrame();
-      }
-    } catch (const std::exception& e) {
-      std::cerr << e.what() << std::endl;
-      return EXIT_FAILURE;
-    }
+    // try{
+    //   while (!window.shouldClose()) {
+    //     window.pollEvents();
+    //     // vk.drawFrame(window.getWindow());
+    //     vk.renderFrame();
+    //   }
+    // } catch (const std::exception& e) {
+    //   std::cerr << e.what() << std::endl;
+    //   return EXIT_FAILURE;
+    // }
     
-    vk.waitDeviceIdle();
-    return EXIT_SUCCESS;
+    // vk.waitDeviceIdle();
+    // return EXIT_SUCCESS;
 }

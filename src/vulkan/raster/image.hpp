@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device.hpp"
 #include "device_memory.hpp"
 #include "command_buffers.hpp"
 #include "command_pool.hpp"
@@ -9,15 +10,13 @@
 class VulkanImage {
     public:
         VulkanImage(
-            const VkDevice& device, 
-            const VkPhysicalDevice& physicalDevice,
+            const VulkanDevice& device,
             VkExtent2D extent, 
             VkFormat format,
             VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL,
             VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
         ):  device(device),
-            physicalDevice(physicalDevice),
             extent(extent),
             format(format),
             layout(initialLayout)   
@@ -35,27 +34,30 @@ class VulkanImage {
             info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             info.samples = VK_SAMPLE_COUNT_1_BIT;
 
-            if (vkCreateImage(device, &info, nullptr, &image) != VK_SUCCESS) {
+            if (vkCreateImage(device.getDevice(), &info, nullptr, &image) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create image -> VulkanImage");
             }
         }
 
         VulkanImage(const VulkanImage&) = delete;
         VulkanImage& operator=(const VulkanImage&) = delete;
+
         VulkanImage& operator=(VulkanImage&&) = delete;
-        VulkanImage(VulkanImage&& other) noexcept {
+        VulkanImage(VulkanImage&& other) noexcept
+            : device(std::move(other.device))
+        {
             moveFrom(std::move(other));
         }
 
         ~VulkanImage() {
             if (image) {
-                vkDestroyImage(device, image, nullptr);
+                vkDestroyImage(device.getDevice(), image, nullptr);
                 image = VK_NULL_HANDLE;
             }
         }
 
-        void transitionLayout(VulkanCommandPool& commandPool, VkImageLayout newLayout, VkQueue graphicsQueue) {
-            VulkanCommandBuffers commandBuffers(device, commandPool, 1);
+        void transitionLayout(VulkanCommandPool& commandPool, VkImageLayout newLayout) {
+            VulkanCommandBuffers commandBuffers(device.getDevice(), commandPool, 1);
 
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -115,12 +117,12 @@ class VulkanImage {
 			submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &commandBuffers.getCommandBuffers()[0];
 
-            vkQueueSubmit(graphicsQueue, 1, &submitInfo, nullptr);
-			vkQueueWaitIdle(graphicsQueue);
+            vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, nullptr);
+			vkQueueWaitIdle(device.getGraphicsQueue());
         }
 
         void copyFrom(VulkanCommandPool& commandPool, VkImageLayout newLayout, VkQueue graphicsQueue) {
-            VulkanCommandBuffers commandBuffers(device, commandPool, 1);
+            VulkanCommandBuffers commandBuffers(device.getDevice(), commandPool, 1);
 
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -158,9 +160,9 @@ class VulkanImage {
 
         VulkanDeviceMemory allocateMemory(VkMemoryPropertyFlags properties) {
             const auto reqs = GetMemoryRequirements();
-            VulkanDeviceMemory memory(device, physicalDevice, reqs.memoryTypeBits, 0, properties, reqs.size);
+            VulkanDeviceMemory memory(device, reqs.memoryTypeBits, 0, properties, reqs.size);
 
-            if (vkBindImageMemory(device, image, memory.getMemory(), 0) != VK_SUCCESS) {
+            if (vkBindImageMemory(device.getDevice(), image, memory.getMemory(), 0) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to bind image memory -> VulkanImage");
             }
 
@@ -170,7 +172,7 @@ class VulkanImage {
         VkMemoryRequirements GetMemoryRequirements() const {
             VkMemoryRequirements reqs;
             
-            vkGetImageMemoryRequirements(device, image, &reqs);
+            vkGetImageMemoryRequirements(device.getDevice(), image, &reqs);
 
             return reqs;
         }
@@ -192,8 +194,7 @@ class VulkanImage {
         }
 
     private:
-        VkDevice device;
-        VkPhysicalDevice physicalDevice;
+        VulkanDevice device;
         VkExtent2D extent;
         VkFormat format;
         VkImageLayout layout;

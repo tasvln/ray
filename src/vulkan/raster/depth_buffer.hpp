@@ -3,24 +3,23 @@
 #include "image.hpp"
 #include "image_view.hpp"
 #include "device_memory.hpp"
+#include "device.hpp"
 #include "command_pool.hpp"
 
 class VulkanDepthBuffer {
     public:
         VulkanDepthBuffer(
-            const VkDevice& device, 
-            const VkPhysicalDevice& physicalDevice,
+            const VulkanDevice& device,
             VulkanCommandPool& commandPool, 
-            VkExtent2D extent,
-            VkQueue graphicsQueue
+            VkExtent2D extent
         ): 
-            format(findDepthFormat(physicalDevice)) 
+            format(findDepthFormat(device.getPhysicalDevice())) 
         {
-            image = std::make_unique<VulkanImage>(device, physicalDevice, extent, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+            image = std::make_unique<VulkanImage>(device, extent, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
             memory = std::make_unique<VulkanDeviceMemory>(image->allocateMemory(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
-            imageView = std::make_unique<VulkanImageView>(device, image->getImage(), VK_IMAGE_ASPECT_DEPTH_BIT);
+            imageView = std::make_unique<VulkanImageView>(device.getDevice(), image->getImage(), VK_IMAGE_ASPECT_DEPTH_BIT);
 
-            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, graphicsQueue);
+            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         }
 
         ~VulkanDepthBuffer() = default;

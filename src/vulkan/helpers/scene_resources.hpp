@@ -1,7 +1,7 @@
 #pragma once
 
-#include "buffer.hpp"
-#include "device_memory.hpp"
+#include "vulkan/raster/buffer.hpp"
+#include "vulkan/raster/device_memory.hpp"
 #include "model.hpp"
 #include "texture.hpp"
 #include "texture_image.hpp"

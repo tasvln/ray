@@ -7,9 +7,9 @@
 #include "descriptorset_layout.hpp"
 #include "render_pass.hpp"
 #include "shader_module.hpp"
-#include "helpers/vertex.hpp"
-#include "helpers/uniform_buffer.hpp"
-#include "helpers/scene_resources.hpp"
+#include "vulkan/helpers/vertex.hpp"
+#include "uniform_buffer.hpp"
+#include "vulkan/helpers/scene_resources.hpp"
 #include "depth_buffer.hpp"
 
 
