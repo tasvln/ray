@@ -41,7 +41,7 @@ class VulkanFence {
             }
         }
 
-        void await(const uint64_t timeout) const {
+        void wait(const uint64_t timeout) const {
             if (vkWaitForFences(device, 1, &fence, VK_TRUE, timeout) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to Wait for Fence");
             }

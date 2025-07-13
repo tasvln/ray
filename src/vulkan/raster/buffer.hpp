@@ -6,30 +6,30 @@
 
 class VulkanBuffer{
     public:
-        VulkanBuffer(const VkDevice& device, const VkBufferUsageFlags usage, const size_t size) : device(device) {
+        VulkanBuffer(const VulkanDevice& device, const VkBufferUsageFlags usage, const size_t size) : device(device) {
             VkBufferCreateInfo bufferInfo{};
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
             bufferInfo.size = size;
             bufferInfo.usage = usage;
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-            if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+            if (vkCreateBuffer(device.getDevice(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create buffer!");
             }
         }
 
         ~VulkanBuffer() {
             if (buffer != nullptr) {
-                vkDestroyBuffer(device, buffer, nullptr);
+                vkDestroyBuffer(device.getDevice(), buffer, nullptr);
                 buffer = nullptr;
             }
         }
 
-        VulkanDeviceMemory allocateMemory(const VkPhysicalDevice& physicalDevice, const VkMemoryAllocateFlags allocateFlags = 0, const VkMemoryPropertyFlags propertyFlags) {
+        VulkanDeviceMemory allocateMemory(const VkMemoryAllocateFlags allocateFlags = 0, const VkMemoryPropertyFlags propertyFlags) {
             const auto requirements = getMemoryRequirements();
-            VulkanDeviceMemory memory(device, physicalDevice, requirements.memoryTypeBits, allocateFlags, propertyFlags, requirements.size);
+            VulkanDeviceMemory memory(device, requirements.memoryTypeBits, allocateFlags, propertyFlags, requirements.size);
 
-            if (vkBindBufferMemory(device, buffer, memory.getMemory(), 0) != VK_SUCCESS) {
+            if (vkBindBufferMemory(device.getDevice(), buffer, memory.getMemory(), 0) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to bind buffer memory!");
             }
 
@@ -39,7 +39,7 @@ class VulkanBuffer{
         VkMemoryRequirements getMemoryRequirements() const
         {
             VkMemoryRequirements requirements;
-            vkGetBufferMemoryRequirements(device, buffer, &requirements);
+            vkGetBufferMemoryRequirements(device.getDevice(), buffer, &requirements);
             return requirements;
         }
 
@@ -49,11 +49,11 @@ class VulkanBuffer{
             info.pNext = nullptr;
             info.buffer = buffer;
 
-            return vkGetBufferDeviceAddress(device, &info);
+            return vkGetBufferDeviceAddress(device.getDevice(), &info);
         }
 
         void copyFrom(VulkanCommandPool& commandPool, const VulkanBuffer& src, VkDeviceSize size, VkQueue graphicsQueue) {
-			VulkanCommandBuffers commandBuffers(device, commandPool, 1);
+			VulkanCommandBuffers commandBuffers(device.getDevice(), commandPool, 1);
 
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -84,6 +84,6 @@ class VulkanBuffer{
         }
 
     private:
-        VkDevice device = VK_NULL_HANDLE;
+        VulkanDevice device;
         VkBuffer buffer = VK_NULL_HANDLE;
 };

@@ -10,6 +10,8 @@
 #include <optional>
 #include <set>
 
+#include "instance.hpp"
+
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -21,9 +23,20 @@ struct QueueFamilyIndices {
 
 class VulkanDevice{
     public: 
-        VulkanDevice(VkInstance instance, VkSurfaceKHR surface){
-            pickPhysicalDevice(instance, surface);
-            createLogicalDevice();
+        VulkanDevice(
+            VulkanInstance instance, 
+            VkSurfaceKHR surface,
+            const std::vector<const char*>& requiredExtensions,
+            const VkPhysicalDeviceFeatures& deviceFeatures,
+            const void* nextDeviceFeatures
+        ){
+            pickPhysicalDevice(instance.getInstance(), surface, requiredExtensions);
+            createLogicalDevice(
+                instance,
+                requiredExtensions,
+                deviceFeatures,
+                nextDeviceFeatures
+            );
         }
 
         ~VulkanDevice() {
@@ -73,18 +86,18 @@ class VulkanDevice{
         uint32_t graphicsFamilyIndex {};
         uint32_t presentFamilyIndex {};
 
-        const std::vector<const char*> deviceExtensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-            VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-            VK_KHR_SPIRV_1_4_EXTENSION_NAME,
-            VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME
-        };
+        // const std::vector<const char*> deviceExtensions = {
+        //     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        //     VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        //     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        //     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        //     VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        //     VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        //     VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+        //     VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME
+        // };
 
-        void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
+        void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
             uint32_t deviceCount = 0;
             vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
@@ -96,7 +109,7 @@ class VulkanDevice{
             vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
             for (const auto& device : devices) {
-                if (isDeviceSuitable(device, surface)) {
+                if (isDeviceSuitable(device, surface, deviceExtensions)) {
                     physicalDevice = device;
                     break;
                 }
@@ -107,7 +120,12 @@ class VulkanDevice{
             }
         }
 
-        void createLogicalDevice() {
+        void createLogicalDevice(
+            VulkanInstance instance, 
+            const std::vector<const char*>& requiredExtensions,
+            const VkPhysicalDeviceFeatures& deviceFeatures,
+            const void* nextDeviceFeatures
+        ) {
             // QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
             // std::set<uint32_t> uniqueFamilies = {
@@ -131,52 +149,21 @@ class VulkanDevice{
                 queueCreateInfo.pQueuePriorities = &queuePriority;
                 queueCreateInfos.push_back(queueCreateInfo);
             }
-
-            // 1. Descriptor indexing features
-            VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
-            descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-            descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-            descriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
-            descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
-            descriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-
-            // 2. Acceleration structure features
-            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
-            accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-            accelerationStructureFeatures.accelerationStructure = VK_TRUE;
-
-            // 3. Ray tracing pipeline features
-            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
-            rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-            rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
-
-            // 4. Buffer device address features
-            VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{};
-            bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-            bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
-
-            // 5. Chain pNext pointers properly:
-            // Descriptor indexing -> Acceleration Structure -> Ray Tracing Pipeline -> Buffer Device Address
-            descriptorIndexingFeatures.pNext = &accelerationStructureFeatures;
-            accelerationStructureFeatures.pNext = &rayTracingPipelineFeatures;
-            rayTracingPipelineFeatures.pNext = &bufferDeviceAddressFeatures;
-            bufferDeviceAddressFeatures.pNext = nullptr;
-
-            // 6. Base features struct (could also enable some core features here if needed)
-            VkPhysicalDeviceFeatures2 deviceFeatures2{};
-            deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-            deviceFeatures2.pNext = &descriptorIndexingFeatures;
-
+            
             VkDeviceCreateInfo deviceInfo{};
             deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
             deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
             deviceInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-            deviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-            deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
+            deviceInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
+            deviceInfo.ppEnabledExtensionNames = requiredExtensions.data();
 
-            deviceInfo.pEnabledFeatures = nullptr;
-            deviceInfo.pNext = &deviceFeatures2;
+            deviceInfo.enabledLayerCount = static_cast<uint32_t>(instance.getValidationLayers().size());
+            deviceInfo.ppEnabledLayerNames = instance.getValidationLayers().data();
+
+            deviceInfo.pEnabledFeatures = &deviceFeatures;
+            deviceInfo.pNext = nextDeviceFeatures;
 
             if (vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create logical device");
@@ -186,7 +173,7 @@ class VulkanDevice{
             vkGetDeviceQueue(device, presentFamilyIndex, 0, &presentQueue);
         }
 
-        bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
+        bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
             QueueFamilyIndices indices = findQueueFamilies(device, surface);
 
             if (indices.graphicsFamily.has_value()) {
@@ -197,7 +184,7 @@ class VulkanDevice{
                 presentFamilyIndex = indices.presentFamily.value();
             }
 
-            bool extensionsSupported = checkDeviceExtensionSupport(device);
+            bool extensionsSupported = checkDeviceExtensionSupport(device, deviceExtensions);
 
             // bool swapChainAdequate = false;
             // if (extensionsSupported) {
@@ -239,7 +226,7 @@ class VulkanDevice{
             return indices;
         }
         
-        bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+        bool checkDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*>& deviceExtensions) {
             uint32_t extensionCount;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 

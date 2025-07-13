@@ -130,6 +130,14 @@ class VulkanSceneResources {
             );
         }
 
+        const std::vector<VulkanModel>& getModels() const {
+            return models;
+        }
+
+        const std::vector<VulkanTexture> getTextures() const {
+            return textures;
+        }
+
         const std::vector<VkImageView>& getTextureImageViews() const { 
             return textureImageView; 
         }
