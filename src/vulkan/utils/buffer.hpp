@@ -31,7 +31,6 @@ namespace utils {
         buffer.copyFrom(pool, *stagingBuffer, contentSize, graphicsQueue);
     };
 
-    template <typename T>
     struct BufferResource {
         std::unique_ptr<VulkanBuffer> buffer;
         std::unique_ptr<VulkanDeviceMemory> memory;
@@ -54,10 +53,15 @@ namespace utils {
         BufferResource& operator=(const BufferResource&) = delete;
 
         BufferResource() = default;
-    };
 
+        void clear() {
+            buffer.reset();
+            memory.reset();
+        }
+    };
+ 
     template <typename T>
-    BufferResource<T> createDeviceBuffer(
+    BufferResource createDeviceBuffer(
         const VulkanDevice& device,
         VulkanCommandPool& pool,
         VkBufferUsageFlags usage,
@@ -70,7 +74,7 @@ namespace utils {
             ? VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
             : 0;
 
-        BufferResource<T> resource;
+        BufferResource resource;
         resource.buffer = std::make_unique<VulkanBuffer>(device.device, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, contentSize);
         resource.memory = std::make_unique<VulkanDeviceMemory>(resource.buffer->allocateMemory(device.physicalDevice, allocateFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 

@@ -59,10 +59,10 @@ class VulkanRayTLAS : public VulkanRayAccelerationStructure {
 
         void generateTLAS(
             VkCommandBuffer commandBuffer,
-            VulkanBuffer& buffer,
-            const VkDeviceSize offset,
             VulkanBuffer& scratchBuffer,
-            const VkDeviceSize scratchOffset
+            const VkDeviceSize scratchOffset,
+            VulkanBuffer& buffer,
+            const VkDeviceSize offset
         ) {
             createStructure(buffer, offset);
 

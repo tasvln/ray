@@ -2,6 +2,8 @@
 
 #include "vulkan/raster/buffer.hpp"
 #include "vulkan/raster/device_memory.hpp"
+#include "vulkan/raster/image.hpp"
+#include "vulkan/raster/image_view.hpp"
 #include <vector>
 
 namespace utils
@@ -21,8 +23,15 @@ namespace utils
 		return total;
 	}
 
-    struct StructureData {
-        std::unique_ptr<VulkanBuffer> buffer;
-        std::unique_ptr<VulkanDeviceMemory> deviceMemory;
+    struct ImageData {
+		std::unique_ptr<VulkanImage> image;
+		std::unique_ptr<VulkanDeviceMemory> memory;
+		std::unique_ptr<VulkanImageView> imageView;
+
+		void clear() {
+			image.reset();
+			memory.reset();
+			imageView.reset();
+		}
     };
 } // namespace utils

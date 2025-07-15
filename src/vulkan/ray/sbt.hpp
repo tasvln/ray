@@ -5,7 +5,7 @@
 #include "ray_pipeline.hpp"
 #include "vulkan/helpers/scene_resources.hpp"
 #include "vulkan/raster/buffer.hpp"
-#include "vulkan/utils/stb.hpp"
+#include "vulkan/utils/sbt.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -24,9 +24,9 @@ struct SBTRegion {
     }
 };
 
-class VulkanRaySTB {
+class VulkanRaySBT {
     public:
-        VulkanRaySTB(
+        VulkanRaySBT(
             const VulkanDevice& device,
             const VulkanRayDispatchTable dispatch,
             const VulkanRayPipeline& pipeline,
@@ -83,7 +83,6 @@ class VulkanRaySTB {
 
             bufferMemory = std::make_unique<VulkanDeviceMemory>(
                 buffer->allocateMemory(
-                    device.getPhysicalDevice(),
                     VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                 )
@@ -115,7 +114,7 @@ class VulkanRaySTB {
             bufferMemory->unMap();
         }
 
-        ~VulkanRaySTB() = default;
+        ~VulkanRaySBT() = default;
 
         SBTRegion getRayGenRegion() const {
             return rayGen;

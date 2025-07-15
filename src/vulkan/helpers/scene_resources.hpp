@@ -206,10 +206,10 @@ class VulkanSceneResources {
 		std::vector<VkImageView> textureImageView;
 		std::vector<VkSampler> textureSampler;
 
-        utils::BufferResource<VulkanVertex> vertexBuffer;
-        utils::BufferResource<uint32_t> indexBuffer;
-        utils::BufferResource<VulkanMaterial> materialBuffer;
-        utils::BufferResource<glm::uvec2> offsetBuffer;
-        utils::BufferResource<VkAabbPositionsKHR> aabbBuffer;
-        utils::BufferResource<glm::vec4> proceduralBuffer;
+        utils::BufferResource vertexBuffer;
+        utils::BufferResource indexBuffer;
+        utils::BufferResource materialBuffer;
+        utils::BufferResource offsetBuffer;
+        utils::BufferResource aabbBuffer;
+        utils::BufferResource proceduralBuffer;
 };

@@ -86,7 +86,7 @@ class VulkanRayPipeline {
             return *raySets;
         }
 
-        uint32_t getRayGenShaderIndex() const { 
+        uint32_t getGenShaderIndex() const { 
             return rayGenIndex; 
         }
 
@@ -98,7 +98,7 @@ class VulkanRayPipeline {
             return triangleHitGroupIndex; 
         }
 
-		uint32_t getroceduralHitGroupIndex() const { 
+		uint32_t getProceduralHitGroupIndex() const { 
             return proceduralHitGroupIndex; 
         }
 
