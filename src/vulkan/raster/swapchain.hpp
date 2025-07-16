@@ -61,7 +61,7 @@ class VulkanSwapChain{
         std::vector<VkImage> swapChainImages;
         std::vector<std::unique_ptr<VulkanImageView>> swapChainImageViews; 
 
-        void createSwapChain(GLFWwindow* window, VulkanDevice device, VkSurfaceKHR surface, VkPresentModeKHR presentMode) {
+        void createSwapChain(GLFWwindow* window, VulkanDevice device, VkSurfaceKHR surface, VkPresentModeKHR preMode) {
             SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device.getPhysicalDevice(), surface);
 
             if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty()){
@@ -69,7 +69,7 @@ class VulkanSwapChain{
             }
 
             VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-            VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, presentMode);
+            VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, preMode);
             VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities, window);
             uint32_t imageCount =  chooseImageCount(swapChainSupport.capabilities);
 

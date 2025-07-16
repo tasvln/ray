@@ -28,28 +28,17 @@ class VulkanRasterEngine: public EngineInterface {
         VulkanRasterEngine(
             const EngineConfig& config,
             const VulkanSceneResources& resources,
-            const VkPresentModeKHR presentMode
+            const Window& window
         ):
             resources(resources),
-            presentMode(presentMode)
-        {
-            const auto validationLayers = config.enableValidationLayers ? 
-            std::vector<const char*> {
-                "VK_LAYER_KHRONOS_validation"
-            } : std::vector<const char*>();
-
-            // create window
-            window = std::make_unique<Window>(config);
-            // create instance
-            instance = std::make_unique<VulkanInstance>(validationLayers);
-            // create surface
-            surface = std::make_unique<VulkanSurface>(*instance, *window);
-        }
+            window(window)
+        {}
 
         ~VulkanRasterEngine() {
             clearSwapChain();
         }
 
+        // function to call -> without ray
         void createRasterDevice() {
             if (device) 
                 throw std::runtime_error("Physical device has already been created");
@@ -71,6 +60,7 @@ class VulkanRasterEngine: public EngineInterface {
             createSwapChain();
         }
 
+        // function to call -> ray
         void createDevice(
             const std::vector<const char*>& requiredExtensions,
             const VkPhysicalDeviceFeatures& deviceFeatures,
@@ -80,8 +70,8 @@ class VulkanRasterEngine: public EngineInterface {
                 throw std::runtime_error("Physical device has already been created");
 
             device = std::make_unique<VulkanDevice>(
-                *instance, 
-                *surface,
+                instance, 
+                surface,
                 requiredExtensions,
                 deviceFeatures,
                 nextDeviceFeatures
@@ -94,7 +84,7 @@ class VulkanRasterEngine: public EngineInterface {
             while (window->isMinimized()) 
                 window->wait();
 
-            swapchain = std::make_unique<VulkanSwapChain>(*window, *device, *surface, presentMode);
+            swapchain = std::make_unique<VulkanSwapChain>(window, *device, surface, config.presentMode);
             depthBuffer = std::make_unique<VulkanDepthBuffer>(*device, *commandPool, swapchain->getSwapChainExtent());
 
             for (size_t i = 0; i != swapchain->getSwapChainImages().size(); i++) {
@@ -333,48 +323,16 @@ class VulkanRasterEngine: public EngineInterface {
         }
 
         // this can be defined somewhere else
-        void run() {
-            if (device) 
-                throw std::runtime_error("Physical device has not been created");
-
-            currentFrame = 0;
+        // void run() {
+        //     if (device) 
+        //         throw std::runtime_error("Physical device has not been created");
             
-            window->drawFrame = [this]() {
-                drawFrame();
-            };
+        //     device->wait();
+        // }
 
-            window->onKey = [this](const int key, const int scancode, const int action, const int mods) {
-                onKey(key, scancode, action, mods);
-            };
+        // setter
+        void setCurrentFrame() {
 
-            window->onCursorPosition = [this](const double xpos, const double ypos) {
-                onCursorPosition(xpos, ypos);
-            };
-
-            window->onMouseButton = [this](const int button, const int action, const int mods) {
-                onMouseButton(button, action, mods);
-            };
-
-            window->onScroll = [this](const double xoffset, const double yoffset) {
-                onScroll(xoffset, yoffset);
-            };
-
-            window->run();
-            
-            device->wait();
-        }
-
-        // getters
-        Window& getWindow() const {
-            return *window;
-        }
-
-        const VulkanInstance& getInstance() const {
-            return *instance;
-        }
-
-        const VulkanSurface& getSurface() const {
-            return *surface;
         }
 
         const VulkanDevice& getDevice() const {
@@ -410,16 +368,18 @@ class VulkanRasterEngine: public EngineInterface {
         }
 
     private:
-        EngineConfig config;
+        const EngineConfig config;
         const VulkanSceneResources& resources;
-        const VkPresentModeKHR presentMode;
+        const Window& window;
+        const VulkanInstance instance;
+        const VulkanSurface surface;
+
+        // just moving things around so it's easier to understand -> the engine is basically done just do the right thing
+        // and set the device automatically...
 
         size_t currentFrame;
 
         // Raster
-        std::unique_ptr<Window> window;
-        std::unique_ptr<VulkanInstance> instance;
-        std::unique_ptr<VulkanSurface> surface;
         std::unique_ptr<VulkanDevice> device;
         std::unique_ptr<VulkanSwapChain> swapchain;
         std::unique_ptr<VulkanDepthBuffer> depthBuffer;

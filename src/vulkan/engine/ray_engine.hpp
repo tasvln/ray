@@ -16,14 +16,13 @@
 #include "vulkan/utils/buffer.hpp"
 #include "vulkan/utils/sbt.hpp"
 
-class VulkanRayEngine: public EngineInterface {
+class VulkanRayEngine {
     public:
         VulkanRayEngine(
-            const EngineConfig& config, 
-            const VkPresentModeKHR presentMode,
+            const EngineConfig& config,
             const VulkanSceneResources& resources
         ) :
-            rasterEngine(std::make_unique<VulkanRasterEngine>(config, resources, VK_PRESENT_MODE_FIFO_KHR))
+            rasterEngine(std::make_unique<VulkanRasterEngine>(config, resources))
         {
             // hmm?
             std::cout << "Initializing -> VulkanRayEngine" << std::endl;
@@ -34,6 +33,7 @@ class VulkanRayEngine: public EngineInterface {
             clearAS();
         }
 
+        // function to call
         void setDevice(
             std::vector<const char*>& requiredExtensions,
             VkPhysicalDeviceFeatures& deviceFeatures,
@@ -236,6 +236,7 @@ class VulkanRayEngine: public EngineInterface {
             );
         }
 
+        // function to call
         void createAS() {
             VulkanCommandBuffers commandBuffers(
                 rasterEngine->getDevice().getDevice(),
@@ -284,6 +285,7 @@ class VulkanRayEngine: public EngineInterface {
             blasScratchBuffer.clear();
         }
 
+        // function to call
         void createSwapChain() {
             rasterEngine->createSwapChain();
 
@@ -395,6 +397,7 @@ class VulkanRayEngine: public EngineInterface {
             rasterEngine->clearSwapChain();
         }
 
+        // function to call
         void render(VkCommandBuffer commandBuffer, const size_t currentFrame, const uint32_t imageIndex) {
             const auto extent = rasterEngine->getSwapChain().getSwapChainExtent();
 

@@ -13,7 +13,7 @@ class EngineInterface {
         virtual void clearSwapChain() = 0;
 
         virtual const VulkanSceneResources& getResources() const = 0;
-        virtual UniformData getUBO(VkExtent2D extent) const = 0;
+        // virtual UniformData getUBO(VkExtent2D extent) const = 0;
         // virtual void render();
 
         virtual void run() = 0;
