@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine_interface.hpp"
-#include "engine_config.hpp"
+#include "config.hpp"
 #include "core/window.hpp"
 
 #include "vulkan/raster/instance.hpp"
@@ -27,37 +27,22 @@ class VulkanRasterEngine: public EngineInterface {
 
         VulkanRasterEngine(
             const EngineConfig& config,
-            const VulkanSceneResources& resources,
-            const Window& window
+            VulkanSceneResources& resources,
+            const Window& window,
+            const VulkanInstance& instance,
+            const VulkanSurface& surface
         ):
+            config(config),
             resources(resources),
-            window(window)
-        {}
+            window(window),
+            instance(instance),
+            surface(surface)
+        {
+            std::cout << "Initializing -> VulkanRayEngine" << std::endl;
+        }
 
         ~VulkanRasterEngine() {
             clearSwapChain();
-        }
-
-        // function to call -> without ray
-        void createRasterDevice() {
-            if (device) 
-                throw std::runtime_error("Physical device has already been created");
-            
-            std::vector<const char*> requiredExtensions = 
-            {
-                // VK_KHR_swapchain
-                VK_KHR_SWAPCHAIN_EXTENSION_NAME
-            };
-
-            VkPhysicalDeviceFeatures deviceFeatures {};
-
-            createDevice(
-                requiredExtensions,
-                deviceFeatures,
-                nullptr
-            );
-
-            createSwapChain();
         }
 
         // function to call -> ray
@@ -81,8 +66,8 @@ class VulkanRasterEngine: public EngineInterface {
         }
 
         void createSwapChain() {
-            while (window->isMinimized()) 
-                window->wait();
+            while (window.isMinimized()) 
+                window.wait();
 
             swapchain = std::make_unique<VulkanSwapChain>(window, *device, surface, config.presentMode);
             depthBuffer = std::make_unique<VulkanDepthBuffer>(*device, *commandPool, swapchain->getSwapChainExtent());
@@ -142,7 +127,7 @@ class VulkanRasterEngine: public EngineInterface {
 
         // in another file
         void updateUniformBuffer() {
-            uniformBuffers[currentFrame].setValue(getUBO(swapchain->getSwapChainExtent()));
+            // uniformBuffers[currentFrame].setValue(getUBO(swapchain->getSwapChainExtent()));
         }
 
         // record command buffer but the renderPass portion
@@ -221,6 +206,7 @@ class VulkanRasterEngine: public EngineInterface {
             }
         }
 
+        // moving this to the engine 
         void drawFrame() {
             constexpr auto noTimeout = std::numeric_limits<uint64_t>::max();
 
@@ -322,19 +308,6 @@ class VulkanRasterEngine: public EngineInterface {
             return imageIndex;
         }
 
-        // this can be defined somewhere else
-        // void run() {
-        //     if (device) 
-        //         throw std::runtime_error("Physical device has not been created");
-            
-        //     device->wait();
-        // }
-
-        // setter
-        void setCurrentFrame() {
-
-        }
-
         const VulkanDevice& getDevice() const {
             return *device;
         }
@@ -367,12 +340,16 @@ class VulkanRasterEngine: public EngineInterface {
             return frameBuffers;
         }
 
+        void setCurrentFrame(uint32_t newCurrentFrame) {
+            currentFrame = newCurrentFrame;
+        }
+
     private:
-        const EngineConfig config;
-        const VulkanSceneResources& resources;
-        const Window& window;
+        EngineConfig config;
+        VulkanSceneResources& resources;
+        const Window window;
         const VulkanInstance instance;
-        const VulkanSurface surface;
+        VulkanSurface surface;
 
         // just moving things around so it's easier to understand -> the engine is basically done just do the right thing
         // and set the device automatically...

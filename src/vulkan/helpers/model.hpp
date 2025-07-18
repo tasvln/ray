@@ -57,39 +57,17 @@ struct VertexHasher {
 
 class VulkanModel{
     public:
-        VulkanModel(std::vector<VulkanVertex> vertices,
-            std::vector<uint32_t> indices,
-            std::vector<VulkanMaterial> materials,
-            std::shared_ptr<const VulkanProcedural> procedural = nullptr) : 
-            model{
-                std::move(vertices), 
-                std::move(indices), 
-                std::move(materials), 
-                std::move(procedural)
-            }
-        {}
-
-        // bool operator==(const VulkanVertex& lhs, const VulkanVertex& rhs) {
-        //     return lhs.position == rhs.position &&
-        //         lhs.normal == rhs.normal &&
-        //         lhs.texCoord == rhs.texCoord &&
-        //         lhs.materialIndex == rhs.materialIndex;
-        // }
-
-        ~VulkanModel() = default;
-
-        VulkanModel loadModel(const std::string& filename) {
+        VulkanModel(const std::string& filename) {
             const auto timer = std::chrono::high_resolution_clock::now();
 
-	        const std::string materialPath = std::filesystem::path(filename).parent_path().string();
-
+            const std::string materialPath = std::filesystem::path(filename).parent_path().string();
             tinyobj::ObjReader reader;
 
             if (!reader.ParseFromFile(filename))
-                std::runtime_error("failed to load model->loadModel() '" + filename + "':\n" + reader.Error());
+                throw std::runtime_error("failed to load model '" + filename + "':\n" + reader.Error());
 
             if (!reader.Warning().empty())
-                std::cout << "TinyObjReader->loadModel(): " << reader.Warning();
+                std::cout << "TinyObjReader warning: " << reader.Warning();
 
             auto materials = loadMaterials(reader);
 
@@ -101,11 +79,68 @@ class VulkanModel{
 
             if (reader.GetAttrib().normals.empty())
                 generateSmoothNormals(vertices, indices);
-            
-            const auto elapsed = std::chrono::duration<float, std::chrono::seconds::period>(std::chrono::high_resolution_clock::now() - timer).count();
 
-            return VulkanModel(vertices, indices, materials, nullptr);
+            model = ModelObject {
+                std::move(vertices),
+                std::move(indices),
+                std::move(materials),
+                nullptr
+            };
+
+            const auto elapsed = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - timer).count();
         }
+
+        // VulkanModel(
+        //     std::vector<VulkanVertex> vertices,
+        //     std::vector<uint32_t> indices,
+        //     std::vector<VulkanMaterial> materials,
+        //     std::shared_ptr<const VulkanProcedural> procedural = nullptr
+        // ): 
+        //     model{
+        //         std::move(vertices), 
+        //         std::move(indices), 
+        //         std::move(materials), 
+        //         std::move(procedural)
+        //     }
+        // {}
+
+        // bool operator==(const VulkanVertex& lhs, const VulkanVertex& rhs) {
+        //     return lhs.position == rhs.position &&
+        //         lhs.normal == rhs.normal &&
+        //         lhs.texCoord == rhs.texCoord &&
+        //         lhs.materialIndex == rhs.materialIndex;
+        // }
+
+        ~VulkanModel() = default;
+
+        // VulkanModel loadModel(const std::string& filename) {
+        //     const auto timer = std::chrono::high_resolution_clock::now();
+
+	    //     const std::string materialPath = std::filesystem::path(filename).parent_path().string();
+
+        //     tinyobj::ObjReader reader;
+
+        //     if (!reader.ParseFromFile(filename))
+        //         throw std::runtime_error("failed to load model->loadModel() '" + filename + "':\n" + reader.Error());
+
+        //     if (!reader.Warning().empty())
+        //         std::cout << "TinyObjReader->loadModel(): " << reader.Warning();
+
+        //     auto materials = loadMaterials(reader);
+
+        //     std::vector<VulkanVertex> vertices;
+        //     std::vector<uint32_t> indices;
+        //     std::unordered_map<VulkanVertex, uint32_t> uniqueVertices;
+
+        //     processMeshData(reader, vertices, indices, uniqueVertices);
+
+        //     if (reader.GetAttrib().normals.empty())
+        //         generateSmoothNormals(vertices, indices);
+            
+        //     const auto elapsed = std::chrono::duration<float, std::chrono::seconds::period>(std::chrono::high_resolution_clock::now() - timer).count();
+
+        //     return VulkanModel(vertices, indices, materials, nullptr);
+        // }
 
         std::vector<VulkanMaterial> loadMaterials(const tinyobj::ObjReader& reader) {
             std::vector<VulkanMaterial> materials;

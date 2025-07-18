@@ -20,11 +20,22 @@ class VulkanRayEngine {
     public:
         VulkanRayEngine(
             const EngineConfig& config,
-            const VulkanSceneResources& resources
+            const VulkanSceneResources& resources,
+            const Window& window,
+            const VulkanInstance& instance,
+            const VulkanSurface& surface,
+            uint32_t currentFrame
         ) :
-            rasterEngine(std::make_unique<VulkanRasterEngine>(config, resources))
+            currentFrame(currentFrame),
+            rasterEngine(std::make_unique<VulkanRasterEngine>(
+                config, 
+                resources,
+                window,
+                instance,
+                surface,
+                currentFrame
+            ))
         {
-            // hmm?
             std::cout << "Initializing -> VulkanRayEngine" << std::endl;
         }
 
@@ -34,42 +45,46 @@ class VulkanRayEngine {
         }
 
         // function to call
-        void setDevice(
-            std::vector<const char*>& requiredExtensions,
-            VkPhysicalDeviceFeatures& deviceFeatures,
-            void* nextDeviceFeatures
-        ) {
-            requiredExtensions.insert(requiredExtensions.end(),
-            {	
-                VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        void createDevice() {
+            // I can actually move this to the main engine file
+            std::vector<const char*> requiredExtensions = {
+                VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                 VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-                VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
-            });
+                VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+                VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+                VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+                VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+                VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+                VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME
+            };
+
+            // Base device features
+            VkPhysicalDeviceFeatures deviceFeatures{};
+            deviceFeatures.samplerAnisotropy = VK_TRUE;
 
             // Buffer device address features
-            VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
+            VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{};
             bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-            bufferDeviceAddressFeatures.pNext = nextDeviceFeatures;
-            bufferDeviceAddressFeatures.bufferDeviceAddress = true;
+            bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
 
             // Descriptor indexing features
-            VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures = {};
+            VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
             indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+            indexingFeatures.runtimeDescriptorArray = VK_TRUE;
+            indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
             indexingFeatures.pNext = &bufferDeviceAddressFeatures;
-            indexingFeatures.runtimeDescriptorArray = true;
-            indexingFeatures.shaderSampledImageArrayNonUniformIndexing = true;
 
             // Acceleration structure features
-            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {};
-            accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-            accelerationStructureFeatures.pNext = &indexingFeatures;
-            accelerationStructureFeatures.accelerationStructure = true;
-            
-            // Ray tracing pipeline features
-            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures = {};
+            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructureFeatures{};
+            accelStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+            accelStructureFeatures.accelerationStructure = VK_TRUE;
+            accelStructureFeatures.pNext = &indexingFeatures;
+
+            // Ray tracing features
+            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures{};
             rayTracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-            rayTracingFeatures.pNext = &accelerationStructureFeatures;
-            rayTracingFeatures.rayTracingPipeline = true;
+            rayTracingFeatures.rayTracingPipeline = VK_TRUE;
+            rayTracingFeatures.pNext = &accelStructureFeatures;
 
             rasterEngine->createDevice(
                 requiredExtensions,
@@ -551,8 +566,18 @@ class VulkanRayEngine {
             );
         }
         
+        void setCurrentFrame(uint32_t newCurrentFrame) {
+            this->currentFrame = newCurrentFrame;
+            rasterEngine->setCurrentFrame(newCurrentFrame);
+        }
+
+        VulkanRasterEngine& getRasterEngine() const {
+            return *rasterEngine;
+        }
 
     private:
+        uint32_t currentFrame;
+
         std::unique_ptr<VulkanRasterEngine> rasterEngine;
 
         std::unique_ptr<VulkanRayPipeline> pipeline;

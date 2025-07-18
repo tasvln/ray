@@ -14,15 +14,15 @@ class VulkanTextureImage{
     public:
         VulkanTextureImage(
             const VkDevice device, 
-            const VkQueue graphicsQueue,
             const VkPhysicalDevice& physicalDevice, 
+            const VkQueue graphicsQueue,
             VulkanCommandPool& commandPool, 
             const VulkanTexture& texture
         ) {
             const VkDeviceSize imageSize = texture.getWidth() * texture.getHeight() * 4;
             
             auto stagingBuffer = std::make_unique<VulkanBuffer>(device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, imageSize);
-            auto stagingMemory = stagingBuffer->allocateMemory(physicalDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            auto stagingMemory = stagingBuffer->allocateMemory(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
             // copy data into staging buffer
             void* data = stagingMemory.map(0, imageSize);
@@ -36,13 +36,23 @@ class VulkanTextureImage{
             };
 
             image = std::make_unique<VulkanImage>(device, physicalDevice, extent, VK_FORMAT_R8G8B8A8_UNORM);
-            imageMemory = std::make_unique<VulkanDeviceMemory>(image->allocateMemory());
-            imageView = std::make_unique<VulkanImageView>(device, image->getImage(), image->getFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
+
+            imageMemory = std::make_unique<VulkanDeviceMemory>(
+                image->allocateMemory(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            ));
+
+            imageView = std::make_unique<VulkanImageView>(
+                device, 
+                image->getImage(), 
+                image->getFormat(), 
+                VK_IMAGE_ASPECT_COLOR_BIT
+            );
+
             sampler = std::make_unique<VulkanSampler>(device, VulkanSamplerConfig());
 
-            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, graphicsQueue);
-            image->copyFrom(commandPool, *stagingBuffer, graphicsQueue);
-            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, graphicsQueue);
+            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            image->copyFrom(commandPool, *stagingBuffer);
+            image->transitionLayout(commandPool, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
 
         VulkanTextureImage(const VulkanTextureImage&) = delete;

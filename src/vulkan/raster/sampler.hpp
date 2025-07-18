@@ -37,7 +37,7 @@ struct VulkanSamplerConfig {
 
 class VulkanSampler {
     public:
-        VulkanSampler(const VkDevice& device, const VulkanSamplerConfig& config): device(device) {
+        VulkanSampler(VkDevice device, const VulkanSamplerConfig& config): device(device) {
             VkSamplerCreateInfo samplerInfo{};
             samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
             samplerInfo.magFilter = config.magFilter;
@@ -62,7 +62,7 @@ class VulkanSampler {
             samplerInfo.maxLod = config.maxLod;
 
             if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-                std::runtime_error("failed to create texture sampler");
+                throw std::runtime_error("failed to create texture sampler");
             }
         }
 

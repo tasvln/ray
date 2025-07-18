@@ -31,21 +31,54 @@ class Engine {
             instance = std::make_unique<VulkanInstance>(validationLayers);
             // create surface
             surface = std::make_unique<VulkanSurface>(*instance, *window);
-            // create device
-
 
             // run ray engine
-            // rayEngine = std::make_unique<VulkanRayEngine>(
-            //     config,
-            //     resources,
-            //     currentFrame
-            // )
+            rayEngine = std::make_unique<VulkanRayEngine>(
+                config,
+                resources,
+                *window,
+                *instance,
+                *surface,
+                currentFrame
+            );
 
+            // createDevice
+            createDevice();
+
+            rayEngine->createSwapChain();
 
 
         }
 
         ~Engine() {}
+
+        void createDevice() {
+            rayEngine->createDevice();
+            setOnDevice();
+        }
+
+        void setOnDevice() {
+            rayEngine->setRayOnDevice();
+            createSceneResources();
+        }
+
+        void createSceneResources() {
+            std::vector<VulkanModel> models;
+            std::vector<VulkanTexture> textures;
+
+            VulkanModel model("../assets/models/cottage/cottage_obj.obj");
+            models.emplace_back(model);
+
+            VulkanTexture texture("../assets/textures/cottage/cottage_diffuse.png");
+            textures.emplace_back(textures);
+
+            resources = std::make_unique<VulkanSceneResources>(
+                rayEngine->getRasterEngine().getDevice(),
+                rayEngine->getRasterEngine().getCommandPool(),
+                models,
+                textures
+            );
+        }
 
         void run() {
             // if (device) 
@@ -80,6 +113,12 @@ class Engine {
             // device->wait();
         }
 
+        void render() {
+            // camera
+
+            // render scene
+            config.enableRayTracing ? rayEngine->render() : rayEngine->getRasterEngine().render();
+        }
     private:
         size_t currentFrame;
         // i could just call both here and connect them together

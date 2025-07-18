@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine_config.hpp"
+#include "config.hpp"
 #include "vulkan/helpers/scene_resources.hpp"
 #include "vulkan/raster/uniform_buffer.hpp"
 

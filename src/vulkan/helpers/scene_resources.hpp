@@ -20,8 +20,7 @@ class VulkanSceneResources {
             const VulkanDevice& device,
             VulkanCommandPool& commandPool, 
             std::vector<VulkanModel>&& models, 
-            std::vector<VulkanTexture>&& textures,
-            VkQueue graphicsQueue
+            std::vector<VulkanTexture>&& textures
         ) : 
             models(std::move(models)),
 	        textures(std::move(textures))

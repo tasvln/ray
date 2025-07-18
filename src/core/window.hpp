@@ -10,7 +10,7 @@
 #include <functional>
 
 #include "core/utils/window.hpp"
-#include "vulkan/engine/engine_config.hpp"
+#include "vulkan/engine/config.hpp"
 
 class Window {
     public:
