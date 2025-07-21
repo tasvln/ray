@@ -2,8 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "core/window.hpp"
-#include "vulkan/vulkan_context.hpp"
+#include "vulkan/engine/engine.hpp"
 
 using namespace std;
 
@@ -27,4 +26,19 @@ int main(int argc, char* argv[]) {
     
     // vk.waitDeviceIdle();
     // return EXIT_SUCCESS;
+
+    try {
+        Engine engine;
+
+        engine.run();
+
+        return EXIT_SUCCESS;
+    } 
+    
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_FAILURE;
 }

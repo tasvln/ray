@@ -14,7 +14,7 @@ namespace utils
         std::vector<uint8_t> shaderParams;
     };
 
-    inline size_t alignUp(uint64_t size, uint64_t alignment)
+    inline size_t sbtAlignUp(uint64_t size, uint64_t alignment)
     {
         return (size + alignment - 1) & ~(alignment - 1);
     }

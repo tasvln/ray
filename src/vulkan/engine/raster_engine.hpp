@@ -38,7 +38,7 @@ class VulkanRasterEngine: public EngineInterface {
             instance(instance),
             surface(surface)
         {
-            std::cout << "Initializing -> VulkanRayEngine" << std::endl;
+            std::cout << "Initializing -> VulkanRasterEngine" << std::endl;
         }
 
         ~VulkanRasterEngine() {
@@ -125,13 +125,8 @@ class VulkanRasterEngine: public EngineInterface {
             createSwapChain(); 
         }
 
-        // in another file
-        void updateUniformBuffer() {
-            // uniformBuffers[currentFrame].setValue(getUBO(swapchain->getSwapChainExtent()));
-        }
-
         // record command buffer but the renderPass portion
-        void render(VkCommandBuffer commandBuffer, const size_t currentFrame, const uint32_t imageIndex) {
+        void render(VkCommandBuffer commandBuffer, const uint32_t imageIndex) {
             const auto clearValues = getClearValues();
 
             VkRenderPassBeginInfo renderPassInfo = {};
@@ -207,30 +202,30 @@ class VulkanRasterEngine: public EngineInterface {
         }
 
         // moving this to the engine 
-        void drawFrame() {
-            constexpr auto noTimeout = std::numeric_limits<uint64_t>::max();
+        // void drawFrame() {
+        //     constexpr auto noTimeout = std::numeric_limits<uint64_t>::max();
 
-            auto& inFlightFence = inFlightFences[currentFrame];
-            const auto imageAvailableSemaphore = imageAvailableSemaphores[currentFrame].getSemaphore();
-            const auto renderFinishSemaphore = renderFinishedSemaphores[currentFrame].getSemaphore();
+        //     auto& inFlightFence = inFlightFences[currentFrame];
+        //     const auto imageAvailableSemaphore = imageAvailableSemaphores[currentFrame].getSemaphore();
+        //     const auto renderFinishSemaphore = renderFinishedSemaphores[currentFrame].getSemaphore();
 
-            inFlightFence.wait(noTimeout);
+        //     inFlightFence.wait(noTimeout);
 
-            uint32_t imageIndex;
-            if(!getAcquiredNextImage(imageIndex)) return;
+        //     uint32_t imageIndex;
+        //     if(!getAcquiredNextImage(imageIndex)) return;
 
-            auto commandBuffer = commandBuffers->begin(currentFrame);
-            render(commandBuffer, currentFrame, imageIndex);
-            commandBuffers->end(currentFrame);
+        //     auto commandBuffer = commandBuffers->begin(currentFrame);
+        //     render(commandBuffer, currentFrame, imageIndex);
+        //     commandBuffers->end(currentFrame);
 
-            updateUniformBuffer();
+        //     updateUniformBuffer();
 
-            submitRender(commandBuffer, imageAvailableSemaphore, renderFinishSemaphore);
+        //     submitRender(commandBuffer, imageAvailableSemaphore, renderFinishSemaphore);
 
-            if (!presentImage(imageIndex)) return;
+        //     if (!presentImage(imageIndex)) return;
 
-            currentFrame = (currentFrame + 1) % inFlightFences.size();
-        }
+        //     currentFrame = (currentFrame + 1) % inFlightFences.size();
+        // }
         
         bool presentImage(uint32_t imageIndex) {
             VkSemaphore waitSemaphores[] = {renderFinishedSemaphores[currentFrame].getSemaphore()};
@@ -308,7 +303,7 @@ class VulkanRasterEngine: public EngineInterface {
             return imageIndex;
         }
 
-        const VulkanDevice& getDevice() const {
+        VulkanDevice& getDevice() const {
             return *device;
         }
 
@@ -332,16 +327,29 @@ class VulkanRasterEngine: public EngineInterface {
             return *commandBuffers;
         }
 
-        const std::vector<VulkanUniformBuffer>& getUniformBuffers() const  {
+        std::vector<VulkanUniformBuffer> getUniformBuffers() const  {
             return uniformBuffers;
         }
 
-        const std::vector<VulkanFrameBuffer>& getFrameBuffers() const  {
+        std::vector<VulkanFrameBuffer> getFrameBuffers() const  {
             return frameBuffers;
+        }
+
+        std::vector<VulkanSemaphore>& getImageAvailableSemaphores() {
+            return imageAvailableSemaphores;
+        }
+
+        std::vector<VulkanSemaphore>& getRenderFinishedSemaphores() {
+            return renderFinishedSemaphores;
+        }
+
+        std::vector<VulkanFence>& getInFlightFences() {
+            return inFlightFences;
         }
 
         void setCurrentFrame(uint32_t newCurrentFrame) {
             currentFrame = newCurrentFrame;
+            // this->currentFrame = newCurrentFrame;
         }
 
     private:

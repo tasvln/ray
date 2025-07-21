@@ -25,4 +25,4 @@ class VulkanSphere : public VulkanProcedural {
     private:
         glm::vec3 center;
         float radius;
-}
+};

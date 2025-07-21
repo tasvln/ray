@@ -1,67 +1,76 @@
 #pragma once
 
-#include "buffer.hpp"
+#include "vulkan/utils/buffer.hpp"
 #include <glm/glm.hpp>
-#include <array>
-#include <memory>
 
-struct UniformData {
+struct UniformBufferObject {
     glm::mat4 modelView;
-    glm::mat4 modelViewInverse;
     glm::mat4 projection;
+
+    // why?
+    glm::mat4 modelViewInverse;
     glm::mat4 projectionInverse;
 
-    // glm::vec3 cameraPosition;
-
-    // todo -> what's the point of this
+    // 
     float aperture;
     float focusDistance;
-    float heatmapScale;
+    float heatMapScale;
+
     uint32_t totalNumberOfSamples;
     uint32_t numberOfSamples;
     uint32_t numberOfBounces;
+
+    // why?
     uint32_t randomSeed;
+
     uint32_t hasSky; // bool
     uint32_t showHeatmap; // bool
 };
 
 class VulkanUniformBuffer {
     public:
-        VulkanUniformBuffer(const VkDevice& device, const VkPhysicalDevice& physicalDevice): device(device) {
-            // const auto bufferSize = sizeof(VulkanUniformBuffer);
-            const auto bufferSize = sizeof(UniformData);
+        VulkanUniformBuffer(const VulkanDevice& device) {
+            const auto bufferSize = sizeof(UniformBufferObject);
 
-            buffer = std::make_unique<VulkanBuffer>(device, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bufferSize);
-            memory = std::make_unique<VulkanDeviceMemory>(buffer->allocateMemory(physicalDevice, 0, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+            uboResource.buffer = std::make_unique<VulkanBuffer>(
+                device,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                bufferSize
+            );
+
+            uboResource.memory = std::make_unique<VulkanDeviceMemory>(
+                uboResource.buffer->allocateMemory(
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                )
+            );
         }
 
-        VulkanUniformBuffer(VulkanUniformBuffer&& other) noexcept : buffer(std::move(other.buffer)), memory(std::move(other.memory)) {}
+        // VulkanUniformBuffer(VulkanUniformBuffer&& other) noexcept : buffer(std::move(other.buffer)), memory(std::move(other.memory)) {}
         
-        VulkanUniformBuffer& operator=(VulkanUniformBuffer&& other) noexcept {
-            if (this != &other) {
-                buffer = std::move(other.buffer);
-                memory = std::move(other.memory);
-            }
-            return *this;
-        }
+        // VulkanUniformBuffer& operator=(VulkanUniformBuffer&& other) noexcept {
+        //     if (this != &other) {
+        //         buffer = std::move(other.buffer);
+        //         memory = std::move(other.memory);
+        //     }
+        //     return *this;
+        // }
 
         ~VulkanUniformBuffer() = default;
 
         const VulkanBuffer& getBuffer() const {
-            return *buffer;
+            return *uboResource.buffer;
         }
 
         const VulkanDeviceMemory& getMemory() const {
-            return *memory;
+            return *uboResource.memory;
         }
 
-        void setValue(const UniformData& ubo) {
-            const auto data = memory->map(0, sizeof(UniformData));
+        void setUniformBufferInMemory(const UniformBufferObject& ubo) {
+            const auto data = uboResource.memory->map(0, sizeof(UniformBufferObject));
             std::memcpy(data, &ubo, sizeof(ubo));
-            memory->unMap();
+            uboResource.memory->unMap();
         }
-    private: 
-        VkDevice device = VK_NULL_HANDLE;
-        std::unique_ptr<VulkanBuffer> buffer;
-        std::unique_ptr<VulkanDeviceMemory> memory;
+
+    private:
+        utils::BufferResource uboResource;
 };

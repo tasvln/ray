@@ -61,6 +61,8 @@ class VulkanRayEngine {
             // Base device features
             VkPhysicalDeviceFeatures deviceFeatures{};
             deviceFeatures.samplerAnisotropy = VK_TRUE;
+            deviceFeatures.fillModeNonSolid = VK_TRUE;
+            deviceFeatures.shaderInt64 = VK_TRUE;
 
             // Buffer device address features
             VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{};
@@ -80,11 +82,16 @@ class VulkanRayEngine {
             accelStructureFeatures.accelerationStructure = VK_TRUE;
             accelStructureFeatures.pNext = &indexingFeatures;
 
+            VkPhysicalDeviceShaderClockFeaturesKHR shaderClockFeatures = {};
+            shaderClockFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+            shaderClockFeatures.pNext = &accelStructureFeatures;
+            shaderClockFeatures.shaderSubgroupClock = VK_TRUE;
+
             // Ray tracing features
             VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures{};
             rayTracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
             rayTracingFeatures.rayTracingPipeline = VK_TRUE;
-            rayTracingFeatures.pNext = &accelStructureFeatures;
+            rayTracingFeatures.pNext = &shaderClockFeatures;
 
             rasterEngine->createDevice(
                 requiredExtensions,
@@ -413,7 +420,7 @@ class VulkanRayEngine {
         }
 
         // function to call
-        void render(VkCommandBuffer commandBuffer, const size_t currentFrame, const uint32_t imageIndex) {
+        void render(VkCommandBuffer commandBuffer, const uint32_t imageIndex) {
             const auto extent = rasterEngine->getSwapChain().getSwapChainExtent();
 
             VkDescriptorSet descriptorSets[] = {
